@@ -40,78 +40,96 @@ export default function AuthPage() {
 
   // Initialize reCAPTCHA
   useEffect(() => {
-    if (!recaptchaContainerRef.current) {
-        console.log("reCAPTCHA container ref not available yet.");
-        return;
-    }
-    if (window.recaptchaVerifier) {
-        console.log("reCAPTCHA verifier already exists, clearing old one.");
-        window.recaptchaVerifier.clear();
-    }
+    let verifier: RecaptchaVerifier | null = null; // Local variable for cleanup
 
-    try {
-      console.log("Initializing RecaptchaVerifier...");
-      window.recaptchaVerifier = new RecaptchaVerifier(auth, recaptchaContainerRef.current, {
-        size: 'invisible', // Use invisible reCAPTCHA
-        callback: (response: any) => {
-          // reCAPTCHA solved, allow signInWithPhoneNumber.
-          console.log('reCAPTCHA verified successfully via callback.');
-          // Usually OTP sending is triggered elsewhere, but this confirms verification
-        },
-        'expired-callback': () => {
-          // Response expired. Ask user to solve reCAPTCHA again.
-          console.warn('reCAPTCHA verification expired. User needs to retry.');
-          setError('reCAPTCHA verification expired. Please try sending OTP again.');
-          setIsLoading(false);
-          // Optionally reset reCAPTCHA here if needed
-          if (window.recaptchaVerifier) {
+    const initializeRecaptcha = () => {
+        if (!recaptchaContainerRef.current) {
+            console.log("reCAPTCHA container ref not available yet.");
+            return;
+        }
+        if (window.recaptchaVerifier) {
+            console.log("reCAPTCHA verifier already exists, clearing old one.");
             window.recaptchaVerifier.clear();
-            console.log("Cleared expired reCAPTCHA. Ready for retry.");
-          }
-        },
-      });
-      // Render the reCAPTCHA explicitly. Important for invisible reCAPTCHA.
-      window.recaptchaVerifier.render().then((widgetId) => {
-          console.log(`reCAPTCHA rendered successfully. Widget ID: ${widgetId}`);
-          // Ensure container is visible, although reCAPTCHA itself is invisible
-           if (recaptchaContainerRef.current) {
-               recaptchaContainerRef.current.style.display = 'block'; // Make sure container is in DOM flow
-           }
-      }).catch((err) => {
-          console.error("Error rendering reCAPTCHA:", err);
-          setError(`Failed to render reCAPTCHA: ${err.message}. Please refresh and try again.`);
-          toast({ title: "reCAPTCHA Error", description: "Could not initialize verification. Please refresh.", variant: "destructive" });
-      });
+            window.recaptchaVerifier = undefined; // Ensure old instance is removed
+        }
 
-    } catch (err: any) {
-        console.error("Error creating RecaptchaVerifier instance:", err);
-        setError(`Failed to initialize security check: ${err.message}. Check Firebase setup and authorized domains.`);
-        toast({ title: "Setup Error", description: "Failed to initialize security features. Check console.", variant: "destructive" });
-    }
+        try {
+          console.log("Initializing RecaptchaVerifier...");
+          verifier = new RecaptchaVerifier(auth, recaptchaContainerRef.current, {
+            size: 'invisible', // Use invisible reCAPTCHA
+            callback: (response: any) => {
+              console.log('reCAPTCHA verified successfully via callback.');
+            },
+            'expired-callback': () => {
+              console.warn('reCAPTCHA verification expired. User needs to retry.');
+              setError('reCAPTCHA verification expired. Please try sending OTP again.');
+              setIsLoading(false);
+              // Reset reCAPTCHA on expiration
+              if (verifier) {
+                verifier.clear();
+                console.log("Cleared expired reCAPTCHA. Ready for retry.");
+                // Re-initialize immediately? Or wait for user action? Waiting might be safer.
+                // initializeRecaptcha(); // Could cause loops if errors persist
+              }
+            },
+          });
+          window.recaptchaVerifier = verifier; // Assign to window only after successful creation
+
+          // Render the reCAPTCHA explicitly. Important for invisible reCAPTCHA.
+          verifier.render().then((widgetId) => {
+              console.log(`reCAPTCHA rendered successfully. Widget ID: ${widgetId}`);
+               if (recaptchaContainerRef.current) {
+                   recaptchaContainerRef.current.style.display = 'block';
+               }
+          }).catch((err) => {
+              console.error("Error rendering reCAPTCHA:", err);
+              setError(`Failed to render reCAPTCHA: ${err.message}. Please refresh and try again.`);
+              toast({ title: "reCAPTCHA Error", description: "Could not initialize verification. Please refresh.", variant: "destructive" });
+              // Clean up if render fails
+              if (verifier) verifier.clear();
+              window.recaptchaVerifier = undefined;
+          });
+
+        } catch (err: any) {
+            console.error("Error creating RecaptchaVerifier instance:", err);
+            setError(`Failed to initialize security check: ${err.message}. Check Firebase setup and authorized domains.`);
+            toast({ title: "Setup Error", description: "Failed to initialize security features. Check console.", variant: "destructive" });
+            window.recaptchaVerifier = undefined; // Ensure it's undefined on error
+        }
+    };
+
+    initializeRecaptcha(); // Initial attempt
 
     // Cleanup function
     return () => {
       console.log("Cleaning up RecaptchaVerifier on component unmount...");
-      if (window.recaptchaVerifier && typeof window.recaptchaVerifier.clear === 'function') {
+      // Use the local 'verifier' variable captured in the closure for cleanup
+      if (verifier && typeof verifier.clear === 'function') {
         try {
-            window.recaptchaVerifier.clear();
+            verifier.clear();
             console.log("RecaptchaVerifier instance cleared.");
         } catch (clearError) {
-            // Catch potential errors during cleanup, though usually not critical
             console.error("Error during RecaptchaVerifier cleanup:", clearError);
         }
-        window.recaptchaVerifier = undefined; // Ensure it's marked as undefined
+      }
+      // Also try cleaning window object just in case
+       if (window.recaptchaVerifier && typeof window.recaptchaVerifier.clear === 'function') {
+           try { window.recaptchaVerifier.clear(); } catch (e) { console.error("Error clearing window.recaptchaVerifier:", e);}
+           window.recaptchaVerifier = undefined;
+       }
+
         // Remove the reCAPTCHA badge if it exists
         const badge = document.querySelector('.grecaptcha-badge');
         if (badge && badge.parentElement) {
-            badge.parentElement.remove();
-            console.log("Removed reCAPTCHA badge from DOM.");
+            try {
+                badge.parentElement.remove();
+                console.log("Removed reCAPTCHA badge from DOM.");
+            } catch (removeError) {
+                 console.error("Error removing reCAPTCHA badge:", removeError);
+            }
         }
-      } else {
-          console.log("No active RecaptchaVerifier instance found to clear.");
-      }
     };
-  }, [auth]); // Add auth instance as dependency, ensures re-init if auth changes (unlikely but good practice)
+  }, [auth]); // Depend only on auth instance
 
 
   const handlePhoneNumberChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -136,7 +154,6 @@ export default function AuthPage() {
 
     // Check if reCAPTCHA verifier is initialized and rendered
     if (!window.recaptchaVerifier || !window.recaptchaVerifier.auth) {
-        // Attempt to re-render or prompt user? Often a refresh is the practical solution.
         console.error('reCAPTCHA verifier not ready or rendered.');
         setError('Security check not ready. Please wait a moment or refresh the page.');
         toast({ title: "Verification Error", description: "Security check failed to initialize. Try refreshing.", variant: "destructive" });
@@ -165,7 +182,7 @@ export default function AuthPage() {
       } else if (err.code === 'auth/too-many-requests') {
         userMessage = 'Too many requests. Please wait a while before trying again.';
       } else if (err.code === 'auth/network-request-failed') {
-         userMessage = 'Network error: Could not connect to Firebase. Check your internet connection and ensure Firebase services are reachable.';
+         userMessage = 'Network error: Could not connect to Firebase Authentication. Check your internet connection and firewall settings. Ensure Firebase services are reachable.';
          console.error("Network request failed detail:", err.message); // Log more details if available
       } else if (err.code === 'auth/captcha-check-failed' || err.message?.includes('reCAPTCHA')) {
          userMessage = 'reCAPTCHA verification failed. Please try again.';
@@ -198,9 +215,9 @@ export default function AuthPage() {
     console.log("Attempting to verify OTP...");
     setError(null); // Clear previous errors
 
-    if (!otp.trim()) {
-       setError('Please enter the OTP.');
-       console.warn("Verify OTP attempt with empty OTP.");
+    if (!otp.trim() || otp.length !== 6) { // Add length check
+       setError('Please enter the 6-digit OTP.');
+       console.warn("Verify OTP attempt with invalid OTP format.");
        return;
     }
     if(!window.confirmationResult) {
@@ -236,7 +253,7 @@ export default function AuthPage() {
           setIsOtpSent(false); // Force user to request again
           setOtp(''); // Clear expired OTP
       } else if (err.code === 'auth/network-request-failed') {
-          userMessage = 'Network error during verification. Check your connection and try again.';
+          userMessage = 'Network error during verification. Check your internet connection and try again.';
       } else if (err.code === 'auth/credential-already-in-use') {
            userMessage = 'This phone number is already associated with another account.';
       } else if (err.code === 'auth/user-disabled') {
@@ -286,7 +303,7 @@ export default function AuthPage() {
                  <p id="phone-hint" className="text-xs text-muted-foreground mt-1">Include your country code.</p>
               </div>
               {/* reCAPTCHA container - crucial for invisible reCAPTCHA initialization */}
-              <div ref={recaptchaContainerRef} id="recaptcha-container" style={{ marginTop: '1rem' }}></div>
+              <div ref={recaptchaContainerRef} id="recaptcha-container" style={{ marginTop: '1rem', minHeight: '1px' }}></div> {/* Ensure container has some height */}
               <Button type="submit" className="w-full bg-accent hover:bg-accent/90 text-accent-foreground" disabled={isLoading}>
                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Send OTP'}
               </Button>

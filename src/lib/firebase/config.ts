@@ -31,15 +31,21 @@ const db = getFirestore(app);
 const storage = getStorage(app);
 
 // Initialize Firebase Analytics (Optional, only if needed and supported)
-let analytics;
+let analytics = null; // Initialize as null
 if (typeof window !== 'undefined') { // Check if running in browser environment
     isSupported().then((supported) => {
         if (supported) {
-            analytics = getAnalytics(app);
-            console.log("Firebase Analytics initialized.");
+            try {
+                analytics = getAnalytics(app);
+                console.log("Firebase Analytics initialized.");
+            } catch (e) {
+                console.error("Error initializing Firebase Analytics:", e);
+            }
         } else {
             console.log("Firebase Analytics is not supported in this environment.");
         }
+    }).catch(e => {
+        console.error("Error checking Analytics support:", e);
     });
 }
 
@@ -63,8 +69,9 @@ Firebase project console (https://console.firebase.google.com/project/citizen-b8
 1.  **Authentication:**
     *   Go to Authentication -> Sign-in method tab.
     *   **Enable Phone Provider:** Click 'Add new provider' and enable 'Phone'.
-    *   **Authorized Domains:** Under the Settings tab, ensure your app's deployment domain (e.g., `your-app-name.vercel.app`, `yourdomain.com`) AND `localhost` (for local testing) are listed. Click 'Add domain' if needed.
+    *   **Authorized Domains:** Under the Settings tab, ensure your app's deployment domain (e.g., `your-app-name.vercel.app`, `yourdomain.com`) AND `localhost` (for local testing) are listed. Click 'Add domain' if needed. **Crucial for reCAPTCHA verification.**
     *   **(Optional) Test Phone Numbers:** Still under Settings > Phone number sign-in, you can add test phone numbers and verification codes (e.g., +1 123-456-7890 with code 123456) to bypass SMS sending during development.
+    *   **reCAPTCHA:** Phone Auth relies on reCAPTCHA. Ensure your site can load Google's reCAPTCHA scripts (check network requests and potential blockers like ad-blockers if auth fails).
 
 2.  **Firestore Database:**
     *   Go to Firestore Database -> Create database.
@@ -84,20 +91,23 @@ Firebase project console (https://console.firebase.google.com/project/citizen-b8
         rules_version = '2';
         service cloud.firestore {
           match /databases/{database}/documents {
-            // Allow logged-in users to read posts, allow creators to write/update their own posts
+            // Allow logged-in users to read posts
+            // Allow logged-in users to create posts if they are the author
+            // Allow authors or municipal users to update/delete posts
             match /posts/{postId} {
               allow read: if request.auth != null;
-              allow create: if request.auth != null;
-              allow update, delete: if request.auth != null && request.auth.uid == resource.data.userId;
-              // Municipal users might need broader update permissions (e.g., for status/reply)
-              allow update: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'municipal';
+              allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+              allow update: if request.auth != null &&
+                              (request.auth.uid == resource.data.userId ||
+                               get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'municipal');
+              allow delete: if request.auth != null && request.auth.uid == resource.data.userId; // Or restrict further
             }
-            // Allow users to read/create their own user doc, maybe municipal read?
+            // Allow users to read/create/update their own user doc
+            // Allow municipal users to read user data (for citizen list)
              match /users/{userId} {
-               allow read, create: if request.auth != null && request.auth.uid == userId;
+               allow read: if request.auth != null && (request.auth.uid == userId || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'municipal');
+               allow create: if request.auth != null && request.auth.uid == userId;
                allow update: if request.auth != null && request.auth.uid == userId;
-               // Example: allow municipal users to read user data (adjust based on needs)
-               // allow read: if request.auth != null && (request.auth.uid == userId || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'municipal');
              }
           }
         }
@@ -107,6 +117,7 @@ Firebase project console (https://console.firebase.google.com/project/citizen-b8
         rules_version = '2';
         service firebase.storage {
           match /b/{bucket}/o {
+            // Allow logged-in users to read any post image
             // Allow logged-in users to upload to their own folder within 'posts'
             match /posts/{userId}/{allPaths=**} {
               allow read: if request.auth != null;
@@ -122,10 +133,17 @@ Firebase project console (https://console.firebase.google.com/project/citizen-b8
     *   **Recommendation for Production:** Move sensitive keys (like `apiKey`) to environment variables.
         *   Create a `.env.local` file in your project root (add it to `.gitignore`).
         *   Add keys like `NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSy...`
-        *   Access them in `config.ts` using `process.env.NEXT_PUBLIC_FIREBASE_API_KEY`.
+        *   Access them in `config.ts` using `process.env.NEXT_PUBLIC_FIREBASE_API_KEY`. Ensure the `NEXT_PUBLIC_` prefix is used for client-side access in Next.js.
 
 6.  **(Optional) Google Analytics:**
-    *   If you enabled Analytics during project creation, ensure `measurementId` is correct. No extra console setup is usually needed beyond initial enablement. Data will start appearing in the Analytics section of the Firebase console.
+    *   If you enabled Analytics during project creation, ensure `measurementId` is correct. No extra console setup is usually needed beyond initial enablement. Data will start appearing in the Analytics section of the Firebase console. Check network requests if data isn't appearing.
+
+7.  **Network/Firewall Issues:**
+    *   Errors like `auth/network-request-failed` often indicate problems connecting to Firebase services. Check:
+        *   Your internet connection.
+        *   Any firewalls or proxies that might be blocking requests to `*.firebaseapp.com`, `*.googleapis.com`, or `google.com`.
+        *   Browser extensions that might interfere (like ad blockers).
+        *   Ensure Firebase service status is operational: [https://status.firebase.google.com/](https://status.firebase.google.com/)
 
 ============================================
 */
