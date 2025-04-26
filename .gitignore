@@ -1,40 +1,60 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# dependencies
+# Dependencies
 /node_modules
 /.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
+.pnp.js
 
-# testing
+# Testing
 /coverage
 
-# next.js
+# Next.js
 /.next/
 /out/
 
-# production
+# Production
 /build
 
-# misc
+# Misc
 .DS_Store
 *.pem
 
-# debug
+# Debug logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.pnpm-debug.log*
+pnpm-debug.log*
 
-# vercel
-.vercel
+# Local Environment Variables
+.env*.local
 
-# typescript
+# Editor directories and files
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.sublime-workspace
+
+# Optional: Log files
+*.log
+
+# Optional: Compiled code
+*.js.map
+*.css.map
+
+# Optional: Compiled TypeScript files
 *.tsbuildinfo
-next-env.d.ts
 
-.genkit/*
+# Firebase Emulators
+firebase-debug.log
+*.sqlite
+# Ignore Hosting emulator directory (if used)
+.firebase/hosting.*.cache
+
+# Genkit (if applicable)
+.genkit/
+genkit.state
+
+# turbo cache
+.turbo
