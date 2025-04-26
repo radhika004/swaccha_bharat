@@ -48,6 +48,7 @@ export default function AuthPage() {
     }
 
     try {
+      console.log("Initializing RecaptchaVerifier...");
       window.recaptchaVerifier = new RecaptchaVerifier(auth, recaptchaContainerRef.current, {
         size: 'invisible', // Use invisible reCAPTCHA
         callback: (response: any) => {
@@ -56,25 +57,31 @@ export default function AuthPage() {
         },
         'expired-callback': () => {
           // Response expired. Ask user to solve reCAPTCHA again.
+          console.warn('reCAPTCHA verification expired.');
           setError('reCAPTCHA verification expired. Please try sending OTP again.');
           setIsLoading(false);
           // Optionally reset reCAPTCHA here if needed
         },
       });
        // Render the reCAPTCHA explicitly if needed, or rely on signInWithPhoneNumber trigger
-       window.recaptchaVerifier.render().catch((err) => {
+       window.recaptchaVerifier.render().then(() => {
+           console.log("reCAPTCHA rendered.");
+       }).catch((err) => {
            console.error("Error rendering reCAPTCHA:", err);
            setError("Failed to initialize reCAPTCHA. Please refresh and try again.");
+           toast({ title: "reCAPTCHA Error", description: "Failed to render reCAPTCHA. Please refresh.", variant: "destructive" });
        });
 
     } catch (err: any) {
         console.error("Error creating RecaptchaVerifier:", err);
         setError(`Failed to initialize reCAPTCHA: ${err.message}. Please check your Firebase setup and ensure the domain is authorized.`);
+        toast({ title: "Setup Error", description: "Failed to initialize reCAPTCHA. Check console for details.", variant: "destructive" });
     }
 
 
     // Cleanup function
     return () => {
+        console.log("Cleaning up RecaptchaVerifier...");
       if (window.recaptchaVerifier && window.recaptchaVerifier.clear) {
         try {
             window.recaptchaVerifier.clear();
@@ -86,6 +93,7 @@ export default function AuthPage() {
         // Attempt to remove the reCAPTCHA widget from the DOM
         const recaptchaWidgets = document.querySelectorAll('.grecaptcha-badge');
         recaptchaWidgets.forEach(widget => widget.remove());
+         console.log("Removed reCAPTCHA badges.");
       }
     };
   }, []); // Run only once on mount
@@ -101,8 +109,15 @@ export default function AuthPage() {
 
   const handleSendOtp = async (e: FormEvent) => {
     e.preventDefault();
-    if (!phoneNumber || !window.recaptchaVerifier) {
-      setError('Please enter a valid phone number and wait for reCAPTCHA to initialize.');
+     console.log("Attempting to send OTP...");
+    if (!phoneNumber) {
+       setError('Please enter a valid phone number.');
+       console.warn("Send OTP attempt with empty phone number.");
+       return;
+     }
+    if (!window.recaptchaVerifier) {
+      setError('reCAPTCHA not ready. Please wait a moment and try again.');
+      console.warn("Send OTP attempt before reCAPTCHA is ready.");
       return;
     }
     setIsLoading(true);
@@ -127,26 +142,38 @@ export default function AuthPage() {
       } else if (err.code === 'auth/too-many-requests') {
         userMessage = 'Too many requests. Please wait a while before trying again.';
       } else if (err.code === 'auth/network-request-failed') {
-         userMessage = 'Network error. Please check your internet connection and try again.'; // Improved message
-      } else if (err.message.includes('reCAPTCHA')) {
-         userMessage = 'reCAPTCHA verification failed. Please refresh and try again.';
-         // Attempt to reset reCAPTCHA
+         userMessage = 'Network error. Please check your internet connection and Firebase setup, then try again.'; // Improved message
+      } else if (err.code === 'auth/captcha-check-failed' || err.message.includes('reCAPTCHA')) {
+         userMessage = 'reCAPTCHA verification failed. Please try again.';
+         console.warn("reCAPTCHA check failed during OTP send.");
+         // Attempt to reset reCAPTCHA (might need page refresh depending on state)
          if (window.recaptchaVerifier?.clear) {
+             console.log("Attempting to clear reCAPTCHA after failure...");
              window.recaptchaVerifier.clear();
+             // Re-render might be needed, but often a retry by user is simplest
          }
       }
       setError(userMessage + ` (Code: ${err.code})`);
-      toast({ title: "Error", description: userMessage, variant: "destructive" });
+      toast({ title: "Error Sending OTP", description: userMessage, variant: "destructive" });
     } finally {
       setIsLoading(false);
+       console.log("Send OTP process finished.");
     }
   };
 
   const handleVerifyOtp = async (e: FormEvent) => {
     e.preventDefault();
-    if (!otp || !window.confirmationResult) {
-      setError('Please enter the OTP.');
-      return;
+    console.log("Attempting to verify OTP...");
+    if (!otp) {
+       setError('Please enter the OTP.');
+       console.warn("Verify OTP attempt with empty OTP.");
+       return;
+    }
+    if(!window.confirmationResult) {
+       setError('OTP confirmation context lost. Please request a new OTP.');
+       console.error("Verify OTP attempt without confirmationResult.");
+        setIsOtpSent(false); // Go back to phone number input
+        return;
     }
     setIsLoading(true);
     setError(null);
@@ -159,6 +186,7 @@ export default function AuthPage() {
 
       // Redirect based on user type
       const redirectPath = userType === 'citizen' ? '/citizen/home' : '/municipal/dashboard';
+      console.log(`Redirecting to ${redirectPath}...`);
       router.push(redirectPath);
 
     } catch (err: any) {
@@ -168,6 +196,7 @@ export default function AuthPage() {
           userMessage = 'Invalid OTP code entered.';
       } else if (err.code === 'auth/code-expired') {
           userMessage = 'The OTP code has expired. Please request a new one.';
+          setIsOtpSent(false); // Force user to request again
       } else if (err.code === 'auth/network-request-failed') {
           userMessage = 'Network error during verification. Please check your internet connection and try again.'; // Improved message
       }
@@ -175,6 +204,7 @@ export default function AuthPage() {
        toast({ title: "Verification Failed", description: userMessage, variant: "destructive" });
     } finally {
       setIsLoading(false);
+      console.log("Verify OTP process finished.");
     }
   };
 
@@ -246,4 +276,3 @@ export default function AuthPage() {
     </div>
   );
 }
-

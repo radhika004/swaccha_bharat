@@ -58,12 +58,12 @@ export default function CitizenHomePage() {
       const postsData: Post[] = [];
       querySnapshot.forEach((doc) => {
          const data = doc.data();
-         // --- Data Validation ---
+         // --- Data Validation & Logging ---
+          console.log(`Processing post ${doc.id}:`, data); // Log raw data
          if (!data.imageUrl || !data.caption || !data.timestamp || !data.userId) {
-             console.warn(`Skipping post ${doc.id} due to missing required fields:`, data);
+             console.warn(`Skipping post ${doc.id} due to missing required fields. Image: ${!!data.imageUrl}, Caption: ${!!data.caption}, Timestamp: ${!!data.timestamp}, UserID: ${!!data.userId}`);
              return; // Skip this post if essential data is missing
          }
-         console.log(`Processing post ${doc.id}:`, data); // Log raw data
          postsData.push({
              id: doc.id,
              imageUrl: data.imageUrl,
@@ -77,17 +77,20 @@ export default function CitizenHomePage() {
              municipalReply: data.municipalReply
          } as Post);
       });
-      console.log("Processed posts data:", postsData);
+      console.log("Processed posts data count:", postsData.length);
+      console.log("First few processed posts:", postsData.slice(0, 3)); // Log a sample
       setPosts(postsData);
       setLoading(false);
+      console.log("State updated with posts. Loading set to false.");
     }, (err) => {
-      console.error("Error fetching posts: ", err);
+      console.error("Error fetching posts from Firestore: ", err);
       // Log the specific error details
       console.error("Firestore error code:", err.code);
       console.error("Firestore error message:", err.message);
       console.error("Firestore error stack:", err.stack);
       setError(`Failed to load posts. Please check your connection and permissions. (Code: ${err.code})`);
       setLoading(false);
+      console.error("Error occurred. Loading set to false.");
     });
 
     // Cleanup subscription on unmount
@@ -95,7 +98,7 @@ export default function CitizenHomePage() {
         console.log("Cleaning up Firestore listener.");
         unsubscribe();
     }
-  }, []);
+  }, []); // Re-added dependency array
 
   const PostCardSkeleton = () => (
     <Card className="w-full max-w-lg mx-auto mb-6 overflow-hidden shadow-md rounded-lg">
@@ -135,11 +138,12 @@ export default function CitizenHomePage() {
        <h1 className="text-3xl font-bold text-center mb-8 text-primary">Issue Feed</h1>
       <div className="space-y-6">
         {loading ? (
-          <>
+           <>
+            <p className="text-center text-muted-foreground mt-10">Loading posts...</p>
             <PostCardSkeleton />
             <PostCardSkeleton />
             <PostCardSkeleton />
-          </>
+           </>
         ) : posts.length === 0 ? (
            <p className="text-center text-muted-foreground mt-10">No issues reported yet. Be the first to add one!</p>
         ) : (

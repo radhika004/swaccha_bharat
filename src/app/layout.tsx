@@ -27,8 +27,8 @@ export default function RootLayout({
           inter.variable // Apply font variable
         )}
       >
-         {/* AuthProvider could wrap here if global auth state is needed,
-             or applied within specific route layouts (like /citizen or /municipal) */}
+        {/* AuthProvider could wrap here if global auth state is needed,
+            or applied within specific route layouts (like /citizen or /municipal) */}
         {children}
         <Toaster /> {/* Add Toaster here to display toasts globally */}
       </body>

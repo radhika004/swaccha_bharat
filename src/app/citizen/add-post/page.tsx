@@ -55,6 +55,7 @@ export default function AddPostPage() {
   const handleImageChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+      console.log("Image selected:", file.name, file.size, file.type);
       // Basic validation (type, size)
       if (!file.type.startsWith('image/')) {
          setError('Please select a valid image file.');
@@ -73,6 +74,7 @@ export default function AddPostPage() {
       const reader = new FileReader();
       reader.onloadend = () => {
         setImagePreview(reader.result as string);
+        console.log("Image preview generated.");
       };
       reader.readAsDataURL(file);
       setError(null); // Clear previous errors
@@ -80,13 +82,16 @@ export default function AddPostPage() {
   };
 
   const triggerFileInput = () => {
+    console.log("Triggering file input click.");
     fileInputRef.current?.click();
   };
 
   const handleGetLocation = () => {
+    console.log("Attempting to get location...");
     if (!navigator.geolocation) {
       setError('Geolocation is not supported by your browser.');
        toast({ title: "Geolocation Error", description: "Geolocation is not supported by your browser.", variant: "destructive" });
+       console.error("Geolocation not supported.");
       return;
     }
 
@@ -96,10 +101,13 @@ export default function AddPostPage() {
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         const { latitude, longitude } = position.coords;
+        console.log(`Location obtained: Lat ${latitude}, Lon ${longitude}`);
         setLocation({ latitude, longitude });
         // Fetch address
+        console.log("Fetching address for coordinates...");
         const fetchedAddress = await getAddressFromCoordinates(latitude, longitude);
         setAddress(fetchedAddress);
+        console.log("Address fetched:", fetchedAddress);
         setIsLocating(false);
         toast({ title: "Location Added", description: `Location set: ${fetchedAddress}`});
       },
@@ -123,44 +131,57 @@ export default function AddPostPage() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    console.log("Submit button clicked.");
     setError(null); // Clear previous errors at the start
 
     // --- Explicit Checks ---
+    console.log("Checking authentication status...");
     if (!auth.currentUser) {
        setError('You must be logged in to post.');
        toast({ title: "Not Logged In", description: "Please log in again.", variant: "destructive" });
-       // Optional: redirect to login
+       console.error("User not logged in during post attempt.");
        router.push('/auth/citizen');
        return;
     }
+    console.log("User authenticated:", auth.currentUser.uid);
+
+    console.log("Checking for image file...");
     if (!imageFile) {
       setError('Please select an image.');
        toast({ title: "Missing Image", description: "Please select an image to upload.", variant: "destructive" });
+       console.error("Image file missing during post attempt.");
       return;
     }
+    console.log("Image file present.");
+
+    console.log("Checking for caption...");
      if (!caption.trim()) {
       setError('Please enter a caption describing the issue.');
        toast({ title: "Missing Caption", description: "Please enter a caption.", variant: "destructive" });
+       console.error("Caption missing during post attempt.");
       return;
     }
+    console.log("Caption present:", caption);
     // --- End Explicit Checks ---
 
-
+    console.log("Starting post submission process...");
     setIsLoading(true);
 
     try {
       // 1. Upload Image to Firebase Storage
-      console.log("Uploading image...");
-      const imageRef = ref(storage, `posts/${auth.currentUser.uid}/${Date.now()}_${imageFile.name}`);
+      console.log("Uploading image to Storage...");
+      const storagePath = `posts/${auth.currentUser.uid}/${Date.now()}_${imageFile.name}`;
+      const imageRef = ref(storage, storagePath);
       await uploadBytes(imageRef, imageFile);
       const imageUrl = await getDownloadURL(imageRef);
-      console.log("Image uploaded successfully:", imageUrl);
+      console.log("Image uploaded successfully. URL:", imageUrl);
 
 
       // 2. Prepare Post Data for Firestore
+      console.log("Preparing post data for Firestore...");
       const postData: any = {
         userId: auth.currentUser.uid,
-        userName: auth.currentUser.displayName || auth.currentUser.phoneNumber || 'Anonymous', // Add username/phone if available
+        userName: auth.currentUser.displayName || auth.currentUser.phoneNumber || 'Anonymous User', // Add username/phone if available
         imageUrl: imageUrl,
         caption: caption.trim(), // Ensure caption is trimmed
         timestamp: serverTimestamp(),
@@ -169,33 +190,36 @@ export default function AddPostPage() {
 
       if (location) {
         postData.location = new GeoPoint(location.latitude, location.longitude);
-         console.log("Location data added:", postData.location);
+         console.log("Location GeoPoint added:", postData.location);
       } else {
           console.log("No location data provided.");
       }
        if (address) {
         postData.address = address;
-         console.log("Address data added:", postData.address);
-
+         console.log("Address string added:", postData.address);
       } else {
            console.log("No address data provided.");
       }
 
-      console.log("Attempting to save post data to Firestore:", postData);
+      console.log("Final post data object being sent to Firestore:", postData);
       // 3. Add Post Data to Firestore
       const docRef = await addDoc(collection(db, 'posts'), postData);
 
-      console.log('Post submitted successfully! Document ID:', docRef.id);
-      console.log('Saved Post Data:', postData); // Log the data structure *sent* to Firestore
-
+      console.log('Post submitted successfully to Firestore! Document ID:', docRef.id);
       toast({ title: "Success!", description: "Your issue has been reported." });
       router.push('/citizen/home'); // Redirect to home feed
 
     } catch (err: any) {
       console.error('Error submitting post:', err);
-      setError(`Failed to submit post: ${err.message}. Please try again.`);
+      // Log specific Firebase errors if possible
+      if (err.code) {
+          console.error(`Firebase Error Code: ${err.code}`);
+          console.error(`Firebase Error Message: ${err.message}`);
+      }
+      setError(`Failed to submit post: ${err.message}. Please check console for details.`);
       toast({ title: "Submission Failed", description: `Error: ${err.message}`, variant: "destructive" });
     } finally {
+      console.log("Post submission process finished.");
       setIsLoading(false);
     }
   };
@@ -237,11 +261,11 @@ export default function AddPostPage() {
                     className="w-full border-dashed border-primary text-primary hover:bg-primary/10 flex items-center justify-center py-6"
                     >
                     <Camera className="h-6 w-6 mr-2" />
-                    <span>Click to Upload or Take Photo</span>
+                    <span>{imagePreview ? 'Change Photo' : 'Click to Upload or Take Photo'}</span>
                 </Button>
                 {imagePreview && (
                     <div className="mt-4 border rounded-md overflow-hidden aspect-video relative">
-                     <Image src={imagePreview} alt="Selected preview" fill objectFit="cover" />
+                     <Image src={imagePreview} alt="Selected preview" fill style={{objectFit:"cover"}} />
                     </div>
                 )}
              </div>
