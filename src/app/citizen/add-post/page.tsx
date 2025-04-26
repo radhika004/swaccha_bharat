@@ -123,6 +123,16 @@ export default function AddPostPage() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    setError(null); // Clear previous errors at the start
+
+    // --- Explicit Checks ---
+    if (!auth.currentUser) {
+       setError('You must be logged in to post.');
+       toast({ title: "Not Logged In", description: "Please log in again.", variant: "destructive" });
+       // Optional: redirect to login
+       router.push('/auth/citizen');
+       return;
+    }
     if (!imageFile) {
       setError('Please select an image.');
        toast({ title: "Missing Image", description: "Please select an image to upload.", variant: "destructive" });
@@ -133,44 +143,52 @@ export default function AddPostPage() {
        toast({ title: "Missing Caption", description: "Please enter a caption.", variant: "destructive" });
       return;
     }
-    if (!auth.currentUser) {
-       setError('You must be logged in to post.');
-       toast({ title: "Not Logged In", description: "Please log in again.", variant: "destructive" });
-       // Optional: redirect to login
-       router.push('/auth/citizen');
-       return;
-    }
+    // --- End Explicit Checks ---
+
 
     setIsLoading(true);
-    setError(null);
 
     try {
       // 1. Upload Image to Firebase Storage
+      console.log("Uploading image...");
       const imageRef = ref(storage, `posts/${auth.currentUser.uid}/${Date.now()}_${imageFile.name}`);
       await uploadBytes(imageRef, imageFile);
       const imageUrl = await getDownloadURL(imageRef);
+      console.log("Image uploaded successfully:", imageUrl);
 
-      // 2. Add Post Data to Firestore
+
+      // 2. Prepare Post Data for Firestore
       const postData: any = {
         userId: auth.currentUser.uid,
-        // userName: auth.currentUser.displayName || 'Anonymous', // Add username if available
+        userName: auth.currentUser.displayName || auth.currentUser.phoneNumber || 'Anonymous', // Add username/phone if available
         imageUrl: imageUrl,
-        caption: caption,
+        caption: caption.trim(), // Ensure caption is trimmed
         timestamp: serverTimestamp(),
         status: 'pending', // Initial status
       };
 
       if (location) {
         postData.location = new GeoPoint(location.latitude, location.longitude);
+         console.log("Location data added:", postData.location);
+      } else {
+          console.log("No location data provided.");
       }
        if (address) {
         postData.address = address;
+         console.log("Address data added:", postData.address);
+
+      } else {
+           console.log("No address data provided.");
       }
 
-      await addDoc(collection(db, 'posts'), postData);
+      console.log("Attempting to save post data to Firestore:", postData);
+      // 3. Add Post Data to Firestore
+      const docRef = await addDoc(collection(db, 'posts'), postData);
 
-      console.log('Post submitted successfully!');
-       toast({ title: "Success!", description: "Your issue has been reported." });
+      console.log('Post submitted successfully! Document ID:', docRef.id);
+      console.log('Saved Post Data:', postData); // Log the data structure *sent* to Firestore
+
+      toast({ title: "Success!", description: "Your issue has been reported." });
       router.push('/citizen/home'); // Redirect to home feed
 
     } catch (err: any) {
@@ -198,7 +216,8 @@ export default function AddPostPage() {
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-          <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Add an ID to the form so the footer button can reference it */}
+          <form id="add-post-form" onSubmit={handleSubmit} className="space-y-6">
              {/* Image Upload */}
              <div>
                 <Label htmlFor="image" className="mb-2 block font-medium">Issue Image</Label>
@@ -222,7 +241,7 @@ export default function AddPostPage() {
                 </Button>
                 {imagePreview && (
                     <div className="mt-4 border rounded-md overflow-hidden aspect-video relative">
-                     <Image src={imagePreview} alt="Selected preview" layout="fill" objectFit="cover" />
+                     <Image src={imagePreview} alt="Selected preview" fill objectFit="cover" />
                     </div>
                 )}
              </div>
@@ -275,7 +294,7 @@ export default function AddPostPage() {
          <CardFooter>
              <Button
                 type="submit" // Connects to the form outside CardContent
-                form="add-post-form" // Add an ID to the form
+                form="add-post-form" // Reference the form's ID
                 className="w-full bg-primary hover:bg-primary/90"
                 disabled={isLoading || !imageFile || !caption.trim()} // Disable if loading or missing required fields
               >
@@ -283,8 +302,7 @@ export default function AddPostPage() {
               </Button>
         </CardFooter>
       </Card>
-       {/* Add the form ID here */}
-       <form id="add-post-form" onSubmit={handleSubmit}></form>
+
        {/* Display OpenStreetMap attribution if using Nominatim */}
         <p className="text-center text-xs text-muted-foreground mt-4">
            Address lookup powered by <a href="https://openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="underline">OpenStreetMap</a> contributors.

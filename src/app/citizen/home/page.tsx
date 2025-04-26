@@ -1,19 +1,22 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { collection, query, orderBy, onSnapshot, Timestamp } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, Timestamp, GeoPoint } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import Image from 'next/image';
-import { MapPin, MessageSquare } from 'lucide-react';
+import { MapPin, MessageSquare, User } from 'lucide-react'; // Added User icon
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'; // Added Avatar
+
 
 interface Post {
   id: string;
   imageUrl: string;
   caption: string;
-  location?: { latitude: number; longitude: number }; // Make location optional initially
+  location?: GeoPoint; // Use Firestore GeoPoint type
   address?: string; // Add address field
   timestamp: Timestamp;
   userId: string;
@@ -25,13 +28,18 @@ interface Post {
 // Helper function to format Firestore Timestamp
 const formatDate = (timestamp: Timestamp): string => {
   if (!timestamp) return 'Just now';
-  return timestamp.toDate().toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  try {
+    return timestamp.toDate().toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch (e) {
+    console.error("Error formatting timestamp:", e, timestamp);
+    return 'Invalid date'; // Handle potential errors if timestamp is not valid
+  }
 };
 
 export default function CitizenHomePage() {
@@ -40,23 +48,49 @@ export default function CitizenHomePage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    setLoading(true);
+    setError(null); // Clear previous errors
+    console.log("Setting up Firestore listener for posts...");
     const q = query(collection(db, 'posts'), orderBy('timestamp', 'desc'));
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      console.log(`Received snapshot with ${querySnapshot.size} documents.`);
       const postsData: Post[] = [];
       querySnapshot.forEach((doc) => {
-        postsData.push({ id: doc.id, ...doc.data() } as Post);
+         const data = doc.data();
+         // --- Data Validation ---
+         if (!data.imageUrl || !data.caption || !data.timestamp || !data.userId) {
+             console.warn(`Skipping post ${doc.id} due to missing required fields:`, data);
+             return; // Skip this post if essential data is missing
+         }
+         console.log(`Processing post ${doc.id}:`, data); // Log raw data
+         postsData.push({
+             id: doc.id,
+             imageUrl: data.imageUrl,
+             caption: data.caption,
+             location: data.location, // Keep as GeoPoint
+             address: data.address,
+             timestamp: data.timestamp,
+             userId: data.userId,
+             userName: data.userName,
+             status: data.status,
+             municipalReply: data.municipalReply
+         } as Post);
       });
+      console.log("Processed posts data:", postsData);
       setPosts(postsData);
       setLoading(false);
     }, (err) => {
       console.error("Error fetching posts: ", err);
-      setError("Failed to load posts. Please try again later.");
+      setError(`Failed to load posts. Please check your connection and permissions. (Code: ${err.code})`);
       setLoading(false);
     });
 
     // Cleanup subscription on unmount
-    return () => unsubscribe();
+    return () => {
+        console.log("Cleaning up Firestore listener.");
+        unsubscribe();
+    }
   }, []);
 
   const PostCardSkeleton = () => (
@@ -82,7 +116,14 @@ export default function CitizenHomePage() {
 
 
   if (error) {
-    return <div className="text-center text-red-500 mt-10">{error}</div>;
+    return (
+        <div className="container mx-auto px-4 py-6">
+             <Alert variant="destructive" className="max-w-lg mx-auto">
+              <AlertTitle>Error Loading Feed</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+        </div>
+    );
   }
 
   return (
@@ -100,35 +141,51 @@ export default function CitizenHomePage() {
         ) : (
           posts.map((post) => (
             <Card key={post.id} className="w-full max-w-lg mx-auto overflow-hidden shadow-md rounded-lg border border-border transition-shadow duration-300 hover:shadow-lg">
-              <CardHeader className="p-4">
-                {/* Optional: Add user avatar and name here if available */}
-                <p className="text-xs text-muted-foreground">{formatDate(post.timestamp)}</p>
-                 {post.status === 'solved' && (
-                    <span className="text-xs font-semibold text-green-600 bg-green-100 px-2 py-0.5 rounded-full ml-2 inline-block">
-                      Solved
-                    </span>
-                  )}
-                   {post.status !== 'solved' && (
-                     <span className="text-xs font-semibold text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full ml-2 inline-block">
-                      Pending
-                    </span>
-                  )}
+              <CardHeader className="p-4 flex items-center justify-between">
+                 {/* User Info */}
+                 <div className="flex items-center space-x-3">
+                    <Avatar className="h-10 w-10 border">
+                        {/* Add AvatarImage if you store profile pics */}
+                        <AvatarFallback className="bg-secondary"><User className="h-5 w-5 text-muted-foreground"/></AvatarFallback>
+                    </Avatar>
+                    <div>
+                        <p className="text-sm font-medium text-foreground">{post.userName || 'Anonymous User'}</p>
+                        <p className="text-xs text-muted-foreground">{formatDate(post.timestamp)}</p>
+                    </div>
+                 </div>
+                  {/* Status Badge */}
+                 <div>
+                    {post.status === 'solved' ? (
+                        <span className="text-xs font-semibold text-green-600 bg-green-100 px-2 py-0.5 rounded-full inline-block">
+                        Solved
+                        </span>
+                    ) : (
+                        <span className="text-xs font-semibold text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full inline-block">
+                        Pending
+                        </span>
+                    )}
+                 </div>
               </CardHeader>
-              {post.imageUrl && (
+              {post.imageUrl ? (
                 <div className="relative w-full h-[300px] md:h-[400px] bg-gray-200">
                   <Image
                     src={post.imageUrl}
                     alt={post.caption || 'Issue Image'}
-                    layout="fill"
-                    objectFit="cover"
+                    fill // Use fill instead of layout="fill"
+                    style={{ objectFit: 'cover' }} // Use style prop for objectFit
                     priority={posts.indexOf(post) < 3} // Prioritize loading first few images
+                    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw" // Provide sizes prop
                     onError={(e) => console.error(`Error loading image: ${post.imageUrl}`, e)}
                   />
                 </div>
+              ) : (
+                 <div className="w-full h-[300px] md:h-[400px] bg-gray-200 flex items-center justify-center text-muted-foreground">
+                     <span>Image not available</span>
+                 </div>
               )}
               <CardContent className="p-4">
-                <p className="text-foreground mb-2">{post.caption}</p>
-                 {post.address && (
+                <p className="text-foreground mb-2">{post.caption || '(No caption provided)'}</p>
+                 {post.address ? (
                     <div className="flex items-center text-sm text-muted-foreground mt-2">
                     <MapPin className="h-4 w-4 mr-1" />
                     <span>{post.address}</span>
@@ -144,7 +201,25 @@ export default function CitizenHomePage() {
                         </a>
                     )}
                     </div>
-                )}
+                 ) : post.location ? (
+                      <div className="flex items-center text-sm text-muted-foreground mt-2">
+                         <MapPin className="h-4 w-4 mr-1" />
+                         <span>Lat: {post.location.latitude.toFixed(4)}, Lon: {post.location.longitude.toFixed(4)}</span>
+                           <a
+                            href={`https://www.google.com/maps?q=${post.location.latitude},${post.location.longitude}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="ml-2 text-blue-600 hover:underline text-xs"
+                            >
+                            (View on Map)
+                            </a>
+                     </div>
+                 ) : (
+                      <div className="flex items-center text-sm text-muted-foreground mt-2">
+                         <MapPin className="h-4 w-4 mr-1 text-gray-400" />
+                         <span>Location not provided</span>
+                     </div>
+                 )}
                 {post.municipalReply && (
                   <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-md">
                     <p className="text-sm font-semibold text-green-800 mb-1">Municipal Response:</p>
