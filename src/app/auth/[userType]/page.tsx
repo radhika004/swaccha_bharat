@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { ChangeEvent, FormEvent } from 'react';
@@ -126,7 +127,7 @@ export default function AuthPage() {
       } else if (err.code === 'auth/too-many-requests') {
         userMessage = 'Too many requests. Please wait a while before trying again.';
       } else if (err.code === 'auth/network-request-failed') {
-         userMessage = 'Network error. Please check your connection and try again.';
+         userMessage = 'Network error. Please check your internet connection and try again.'; // Improved message
       } else if (err.message.includes('reCAPTCHA')) {
          userMessage = 'reCAPTCHA verification failed. Please refresh and try again.';
          // Attempt to reset reCAPTCHA
@@ -167,6 +168,8 @@ export default function AuthPage() {
           userMessage = 'Invalid OTP code entered.';
       } else if (err.code === 'auth/code-expired') {
           userMessage = 'The OTP code has expired. Please request a new one.';
+      } else if (err.code === 'auth/network-request-failed') {
+          userMessage = 'Network error during verification. Please check your internet connection and try again.'; // Improved message
       }
       setError(userMessage + ` (Code: ${err.code})`);
        toast({ title: "Verification Failed", description: userMessage, variant: "destructive" });
@@ -243,3 +246,4 @@ export default function AuthPage() {
     </div>
   );
 }
+
