@@ -6,7 +6,8 @@ import { db } from '@/lib/firebase/config';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AlertTriangle, CheckCircle2, ListTodo, Loader2 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'; // Using recharts
-import { ChartTooltipContent, ChartContainer } from '@/components/ui/chart'; // Using ShadCN chart components
+import { ChartTooltipContent, ChartContainer, ChartTooltip } from '@/components/ui/chart'; // Added ChartTooltip import
+import type { ChartConfig } from '@/components/ui/chart'; // Import ChartConfig type
 
 interface IssueStats {
   total: number;
@@ -47,9 +48,9 @@ export default function MunicipalDashboardPage() {
         const solvedQuery = query(postsCol, where('status', '==', 'solved'));
         const solvedSnapshot = await getCountFromServer(solvedQuery);
 
-        // Get pending count (total - solved)
-        // Or query explicitly: const pendingQuery = query(postsCol, where('status', '==', 'pending'));
-        const pendingSnapshot = await getCountFromServer(query(postsCol, where('status', '==', 'pending')));
+        // Get pending count
+        const pendingQuery = query(postsCol, where('status', '==', 'pending'));
+        const pendingSnapshot = await getCountFromServer(pendingQuery);
 
 
         setStats({
@@ -57,7 +58,7 @@ export default function MunicipalDashboardPage() {
           solved: solvedSnapshot.data().count,
           pending: pendingSnapshot.data().count, // Use explicit pending count
         });
-      } catch (err) {
+      } catch (err: any) { // Specify 'any' type for caught error
         console.error("Error fetching issue counts: ", err);
         setError("Failed to load dashboard statistics.");
       } finally {
@@ -200,6 +201,3 @@ export default function MunicipalDashboardPage() {
     </div>
   );
 }
-
-// Make sure to import ChartConfig if it's not globally available
-import type { ChartConfig } from '@/components/ui/chart';
