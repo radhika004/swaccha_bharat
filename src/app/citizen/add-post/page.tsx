@@ -81,7 +81,7 @@ export default function AddPostPage() {
   const [address, setAddress] = useState<string | null>(null);
   const [deadline, setDeadline] = useState<Date | undefined>(undefined); // State for deadline
   const [isLocating, setIsLocating] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false); // This state manages the overall submission loading
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -202,7 +202,7 @@ export default function AddPostPage() {
         variant: 'destructive',
       });
       console.error('User not logged in during post attempt.');
-      router.push('/auth/citizen');
+      router.push('/auth/citizen'); // Redirect if not logged in
       return;
     }
     console.log('User authenticated:', auth.currentUser.uid);
@@ -235,7 +235,7 @@ export default function AddPostPage() {
     // --- End Explicit Checks ---
 
     console.log('Starting post submission process...');
-    setIsLoading(true);
+    setIsLoading(true); // Start loading indicator
 
     try {
       // 1. Upload Image to Firebase Storage
@@ -286,16 +286,18 @@ export default function AddPostPage() {
       console.log('Final post data object being sent to Firestore:', postData);
       // 3. Add Post Data to Firestore
       const docRef = await addDoc(collection(db, 'posts'), postData);
-
       console.log(
         'Post submitted successfully to Firestore! Document ID:',
         docRef.id
       );
+      console.log('Post data saved:', postData); // Verify saved data
+
       toast({ title: 'Success!', description: 'Your issue has been reported.' });
 
-      // 4. Navigate to the feed section
+      // 4. Navigate to the feed section AFTER successful submission
       console.log('Navigating to /citizen/home...');
       router.push('/citizen/home');
+
     } catch (err: any) {
       console.error('Error submitting post:', err);
       // Log specific Firebase errors if possible
@@ -311,9 +313,15 @@ export default function AddPostPage() {
         description: `Error: ${err.message}`,
         variant: 'destructive',
       });
+      setIsLoading(false); // Stop loading on error
     } finally {
       console.log('Post submission process finished.');
-      setIsLoading(false);
+      // Ensure isLoading is set to false regardless of success or failure,
+      // unless navigation happens on success (which implicitly stops showing the form)
+      // If navigation fails for some reason, setting it here prevents infinite loading state.
+      // However, if navigation IS successful, the component unmounts, so this might not run.
+      // It's safer to set it false on error. Navigation handles the success case.
+      // setIsLoading(false); // Removed from here, handled on error and implicitly on success navigation
     }
   };
 
@@ -503,3 +511,4 @@ export default function AddPostPage() {
     </div>
   );
 }
+
