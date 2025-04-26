@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, type FormEvent, type ChangeEvent } from 'react';
@@ -5,7 +6,7 @@ import { collection, query, orderBy, onSnapshot, doc, updateDoc, where, Timestam
 import { db } from '@/lib/firebase/config';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import Image from 'next/image';
-import { MapPin, Filter, Loader2, MessageSquare, CheckCircle, Send, AlertCircle } from 'lucide-react'; // Added AlertCircle
+import { MapPin, Filter, Loader2, MessageSquare, CheckCircle, Send, AlertCircle, CalendarDays, Clock } from 'lucide-react'; // Added CalendarDays, Clock
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -14,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'; // Added Alert components
 import { useToast } from '@/hooks/use-toast';
 import { GeoPoint } from 'firebase/firestore'; // Import GeoPoint
+import { formatDistanceToNow } from 'date-fns'; // Import formatDistanceToNow
 
 
 interface Post {
@@ -27,10 +29,12 @@ interface Post {
   userName?: string;
   status?: 'pending' | 'solved';
   municipalReply?: string;
+  deadline?: Timestamp; // Add deadline field
+  solvedTimestamp?: Timestamp; // Add solvedTimestamp field
 }
 
-// Helper function to format Firestore Timestamp
-const formatDate = (timestamp: Timestamp): string => {
+// Helper function to format Firestore Timestamp (full date)
+const formatFullDate = (timestamp: Timestamp): string => {
   if (!timestamp || typeof timestamp.toDate !== 'function') {
       console.warn("Invalid timestamp received for formatting:", timestamp);
       return 'Invalid date';
@@ -44,6 +48,37 @@ const formatDate = (timestamp: Timestamp): string => {
       return "Error date";
   }
 };
+
+// Helper function to format date relative to now (e.g., "2 days ago")
+const formatRelativeDate = (timestamp: Timestamp): string => {
+    if (!timestamp || typeof timestamp.toDate !== 'function') {
+        return 'a while ago';
+    }
+    try {
+        return formatDistanceToNow(timestamp.toDate(), { addSuffix: true });
+    } catch (e) {
+        console.error("Error formatting relative date:", e, timestamp);
+        return 'Error date';
+    }
+};
+
+// Helper function to format deadline date
+const formatDeadline = (timestamp?: Timestamp): string | null => {
+    if (!timestamp || typeof timestamp.toDate !== 'function') {
+        return null;
+    }
+    try {
+        return timestamp.toDate().toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+        });
+    } catch (e) {
+        console.error("Error formatting deadline:", e, timestamp);
+        return 'Error date';
+    }
+};
+
 
 export default function MunicipalIssuesPage() {
   const [posts, setPosts] = useState<Post[]>([]);
@@ -102,6 +137,15 @@ export default function MunicipalIssuesPage() {
               invalidCount++;
               return;
          }
+          if (data.deadline && !(data.deadline instanceof Timestamp)) {
+              console.warn(`Skipping invalid post ${doc.id}: Invalid deadline type.`, data.deadline);
+              data.deadline = undefined;
+          }
+           if (data.solvedTimestamp && !(data.solvedTimestamp instanceof Timestamp)) {
+              console.warn(`Skipping invalid post ${doc.id}: Invalid solvedTimestamp type.`, data.solvedTimestamp);
+              data.solvedTimestamp = undefined;
+          }
+
         postsData.push({
             id: doc.id,
             imageUrl: data.imageUrl,
@@ -112,7 +156,9 @@ export default function MunicipalIssuesPage() {
             userId: data.userId,
             userName: data.userName,
             status: data.status || 'pending',
-            municipalReply: data.municipalReply
+            municipalReply: data.municipalReply,
+            deadline: data.deadline, // Add deadline
+            solvedTimestamp: data.solvedTimestamp // Add solvedTimestamp
         });
       });
       if (invalidCount > 0) {
@@ -202,14 +248,21 @@ export default function MunicipalIssuesPage() {
   const PostCardSkeleton = () => (
      <Card className="w-full mb-6 overflow-hidden shadow-md rounded-lg animate-pulse border border-border">
         <CardHeader className="p-4">
-            <Skeleton className="h-5 w-1/4 mb-2 bg-muted" /> {/* Status placeholder */}
-            <Skeleton className="h-3 w-1/3 bg-muted" /> {/* Date placeholder */}
+            <div className="flex justify-between items-start">
+                <div>
+                    <Skeleton className="h-5 w-20 mb-1 bg-muted" /> {/* Status placeholder */}
+                    <Skeleton className="h-3 w-24 bg-muted" /> {/* Date placeholder */}
+                </div>
+                <Skeleton className="h-3 w-28 bg-muted" /> {/* User ID placeholder */}
+            </div>
+            <Skeleton className="h-3 w-32 mt-1 bg-muted" /> {/* Username placeholder */}
         </CardHeader>
         <Skeleton className="w-full h-48 bg-muted" /> {/* Image placeholder */}
         <CardContent className="p-4 space-y-2">
             <Skeleton className="h-4 w-full bg-muted" /> {/* Caption line 1 */}
             <Skeleton className="h-4 w-3/4 bg-muted" /> {/* Caption line 2 */}
             <Skeleton className="h-4 w-1/2 mt-2 bg-muted" /> {/* Location placeholder */}
+            <Skeleton className="h-4 w-1/3 mt-2 bg-muted" /> {/* Deadline placeholder */}
         </CardContent>
         <CardFooter className="p-4 flex justify-end space-x-2">
             <Skeleton className="h-9 w-20 rounded-md bg-muted" /> {/* Button placeholder */}
@@ -257,119 +310,151 @@ export default function MunicipalIssuesPage() {
              No {filter !== 'all' ? filter : ''} issues found.
            </p>
         ) : (
-          posts.map((post) => (
-            <Card key={post.id} className="w-full overflow-hidden shadow-md rounded-lg border border-border">
-               <CardHeader className="p-4 flex flex-row justify-between items-start">
-                  <div>
-                     {post.status === 'solved' ? (
-                        <span className="text-xs font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded-full inline-flex items-center border border-green-200">
-                           <CheckCircle className="h-3 w-3 mr-1"/> Solved
-                        </span>
-                     ) : (
-                         <span className="text-xs font-semibold text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full border border-orange-200">
-                           Pending
-                         </span>
-                     )}
-                     <p className="text-xs text-muted-foreground mt-1">{formatDate(post.timestamp)}</p>
-                     {post.userName && <p className="text-xs text-muted-foreground mt-1">By: {post.userName}</p>}
-                  </div>
-                  {/* Optional: Add Citizen User Info if available */}
-                  <p className="text-xs text-muted-foreground text-right">User ID: <span className='font-mono text-xs'>{post.userId.substring(0, 8)}...</span></p>
-               </CardHeader>
-              {post.imageUrl && (
-                <div className="relative w-full h-56 bg-muted">
-                  <Image
-                    src={post.imageUrl}
-                    alt={post.caption || 'Issue Image'}
-                    fill
-                    style={{ objectFit: 'cover' }}
-                    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                    onError={(e) => console.error(`Error loading image: ${post.imageUrl}`)}
-                  />
-                </div>
-              )}
-              <CardContent className="p-4">
-                <p className="text-foreground mb-2 whitespace-pre-wrap">{post.caption}</p>
-                {post.address ? (
-                    <div className="flex items-center text-sm text-muted-foreground mt-2">
-                    <MapPin className="h-4 w-4 mr-1 flex-shrink-0" />
-                    <span className="truncate" title={post.address}>{post.address}</span>
-                    {/* Optional: Link to map */}
-                     {post.location && (
-                        <a
-                        href={`https://www.google.com/maps?q=${post.location.latitude},${post.location.longitude}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="ml-2 text-accent hover:underline text-xs flex-shrink-0"
-                        >
-                        Map
-                        </a>
-                    )}
+          posts.map((post) => {
+             const formattedDeadline = formatDeadline(post.deadline);
+             return (
+                <Card key={post.id} className="w-full overflow-hidden shadow-md rounded-lg border border-border">
+                   <CardHeader className="p-4">
+                      <div className="flex flex-row justify-between items-start">
+                         <div>
+                            {post.status === 'solved' ? (
+                               <span className="text-xs font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded-full inline-flex items-center border border-green-200">
+                                  <CheckCircle className="h-3 w-3 mr-1"/> Solved
+                               </span>
+                            ) : (
+                                <span className="text-xs font-semibold text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full border border-orange-200">
+                                  Pending
+                                </span>
+                            )}
+                            <p className="text-xs text-muted-foreground mt-1" title={formatFullDate(post.timestamp)}>
+                                <Clock className="inline h-3 w-3 mr-0.5 relative -top-px" />
+                                {formatRelativeDate(post.timestamp)}
+                             </p>
+                         </div>
+                         {/* User Info */}
+                         <div className="text-right">
+                             <p className="text-xs text-muted-foreground">User ID: <span className='font-mono text-xs'>{post.userId.substring(0, 8)}...</span></p>
+                              {post.userName && <p className="text-xs text-muted-foreground mt-1">By: {post.userName}</p>}
+                         </div>
+                      </div>
+                   </CardHeader>
+                  {post.imageUrl && (
+                    <div className="relative w-full h-56 bg-muted">
+                      <Image
+                        src={post.imageUrl}
+                        alt={post.caption || 'Issue Image'}
+                        fill
+                        style={{ objectFit: 'cover' }}
+                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                        onError={(e) => console.error(`Error loading image: ${post.imageUrl}`)}
+                      />
                     </div>
-                 ) : post.location ? (
-                      <div className="flex items-center text-sm text-muted-foreground mt-2">
-                          <MapPin className="h-4 w-4 mr-1 flex-shrink-0" />
-                          Lat: {post.location.latitude.toFixed(4)}, Lon: {post.location.longitude.toFixed(4)}
-                          <a
-                              href={`https://www.google.com/maps?q=${post.location.latitude},${post.location.longitude}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="ml-2 text-accent hover:underline text-xs flex-shrink-0"
-                              >
-                              Map
-                          </a>
-                      </div>
-                  ) : (
-                      <div className="flex items-center text-sm text-muted-foreground mt-2">
-                         <MapPin className="h-4 w-4 mr-1 flex-shrink-0 text-gray-400" />
-                         Location not provided
-                      </div>
                   )}
-                 {post.municipalReply && (
-                  <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-md">
-                    <p className="text-sm font-semibold text-green-800 mb-1">Your Response:</p>
-                    <p className="text-sm text-green-700 whitespace-pre-wrap">{post.municipalReply}</p>
-                  </div>
-                )}
-              </CardContent>
-              <CardFooter className="p-4 flex justify-end space-x-2 bg-muted/50 border-t border-border">
-                 {post.status === 'pending' && (
-                     <>
-                     <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleMarkAsSolved(post.id)}
-                        disabled={isUpdatingStatus[post.id] || isReplying} // Disable if updating this post or replying globally
-                     >
-                        {isUpdatingStatus[post.id] ? <Loader2 className="h-4 w-4 animate-spin mr-1"/> : <CheckCircle className="h-4 w-4 mr-1"/>}
-                         Mark Solved
-                     </Button>
-                     <Button
-                        size="sm"
-                        onClick={() => handleOpenReplyDialog(post)}
-                        disabled={isUpdatingStatus[post.id] || isReplying}
-                        className="bg-accent hover:bg-accent/90 text-accent-foreground"
-                      >
-                        <MessageSquare className="h-4 w-4 mr-1"/> Reply & Solve
-                     </Button>
-                     </>
-                 )}
-                  {post.status === 'solved' && !post.municipalReply && ( // Allow adding reply even if solved
-                     <Button
-                         size="sm"
-                        onClick={() => handleOpenReplyDialog(post)}
-                        variant="outline"
-                        disabled={isReplying} // Disable if reply dialog is busy
-                      >
-                         <MessageSquare className="h-4 w-4 mr-1"/> Add Reply
-                     </Button>
-                 )}
-                 {post.status === 'solved' && post.municipalReply && ( // Show indicator if solved and replied
-                      <span className="text-xs text-muted-foreground italic">Replied</span>
-                  )}
-              </CardFooter>
-            </Card>
-          ))
+                  <CardContent className="p-4 space-y-2">
+                    <p className="text-foreground whitespace-pre-wrap">{post.caption}</p>
+                    {post.address ? (
+                        <div className="flex items-center text-sm text-muted-foreground">
+                        <MapPin className="h-4 w-4 mr-1 flex-shrink-0" />
+                        <span className="truncate" title={post.address}>{post.address}</span>
+                        {/* Optional: Link to map */}
+                         {post.location && (
+                            <a
+                            href={`https://www.google.com/maps?q=${post.location.latitude},${post.location.longitude}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="ml-2 text-accent hover:underline text-xs flex-shrink-0"
+                            >
+                            Map
+                            </a>
+                        )}
+                        </div>
+                     ) : post.location ? (
+                          <div className="flex items-center text-sm text-muted-foreground">
+                              <MapPin className="h-4 w-4 mr-1 flex-shrink-0" />
+                              Lat: {post.location.latitude.toFixed(4)}, Lon: {post.location.longitude.toFixed(4)}
+                              <a
+                                  href={`https://www.google.com/maps?q=${post.location.latitude},${post.location.longitude}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="ml-2 text-accent hover:underline text-xs flex-shrink-0"
+                                  >
+                                  Map
+                              </a>
+                          </div>
+                      ) : (
+                          <div className="flex items-center text-sm text-muted-foreground">
+                             <MapPin className="h-4 w-4 mr-1 flex-shrink-0 text-gray-400" />
+                             Location not provided
+                          </div>
+                      )}
+                      {/* Display Deadline */}
+                        {formattedDeadline && (
+                            <div className="flex items-center text-sm text-muted-foreground">
+                                <CalendarDays className="h-4 w-4 mr-1.5 flex-shrink-0 text-red-600" />
+                                <span className="text-red-700 font-medium">Deadline: {formattedDeadline}</span>
+                            </div>
+                        )}
+                     {post.municipalReply && (
+                      <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-md">
+                        <p className="text-sm font-semibold text-green-800 mb-1">Your Response:</p>
+                        <p className="text-sm text-green-700 whitespace-pre-wrap">{post.municipalReply}</p>
+                        {post.solvedTimestamp && (
+                           <p className="text-xs text-muted-foreground mt-1">Replied: {formatRelativeDate(post.solvedTimestamp)}</p>
+                        )}
+                      </div>
+                    )}
+                     {post.status === 'solved' && !post.municipalReply && post.solvedTimestamp &&(
+                         <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                            <p className="text-sm text-yellow-700">Marked as solved {formatRelativeDate(post.solvedTimestamp)} without a comment.</p>
+                         </div>
+                     )}
+                  </CardContent>
+                  <CardFooter className="p-4 flex justify-end space-x-2 bg-muted/50 border-t border-border">
+                     {post.status === 'pending' && (
+                         <>
+                         <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleMarkAsSolved(post.id)}
+                            disabled={isUpdatingStatus[post.id] || isReplying} // Disable if updating this post or replying globally
+                         >
+                            {isUpdatingStatus[post.id] ? <Loader2 className="h-4 w-4 animate-spin mr-1"/> : <CheckCircle className="h-4 w-4 mr-1"/>}
+                             Mark Solved
+                         </Button>
+                         <Button
+                            size="sm"
+                            onClick={() => handleOpenReplyDialog(post)}
+                            disabled={isUpdatingStatus[post.id] || isReplying}
+                            className="bg-accent hover:bg-accent/90 text-accent-foreground"
+                          >
+                            <MessageSquare className="h-4 w-4 mr-1"/> Reply & Solve
+                         </Button>
+                         </>
+                     )}
+                      {post.status === 'solved' && !post.municipalReply && ( // Allow adding reply even if solved
+                         <Button
+                             size="sm"
+                            onClick={() => handleOpenReplyDialog(post)}
+                            variant="outline"
+                            disabled={isReplying} // Disable if reply dialog is busy
+                          >
+                             <MessageSquare className="h-4 w-4 mr-1"/> Add Reply
+                         </Button>
+                     )}
+                     {post.status === 'solved' && post.municipalReply && ( // Show button to edit reply
+                          <Button
+                             size="sm"
+                            onClick={() => handleOpenReplyDialog(post)}
+                            variant="outline"
+                            disabled={isReplying} // Disable if reply dialog is busy
+                          >
+                             <MessageSquare className="h-4 w-4 mr-1"/> Edit Reply
+                         </Button>
+                      )}
+                  </CardFooter>
+                </Card>
+             )
+          })
         )}
       </div>
 

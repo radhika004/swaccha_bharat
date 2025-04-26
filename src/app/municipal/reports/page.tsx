@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState } from 'react';
@@ -19,6 +20,7 @@ interface ReportData {
   address?: string;
   status: 'pending' | 'solved';
   timestamp: Timestamp;
+  deadline?: Timestamp; // Add deadline
   municipalReply?: string;
 }
 
@@ -72,6 +74,7 @@ export default function MunicipalReportsPage() {
            address: docData.address,
            status: docData.status,
            timestamp: docData.timestamp,
+           deadline: docData.deadline, // Include deadline
            municipalReply: docData.municipalReply,
         });
       });
@@ -94,7 +97,7 @@ export default function MunicipalReportsPage() {
     }
 
     // Convert data to CSV format
-    const headers = ['ID', 'Reported Date', 'Status', 'Caption', 'Address', 'Municipal Reply'];
+    const headers = ['ID', 'Reported Date', 'Status', 'Caption', 'Address', 'Deadline', 'Municipal Reply'];
     const csvRows = [
       headers.join(','),
       ...reportData.map(row => [
@@ -103,6 +106,7 @@ export default function MunicipalReportsPage() {
         `"${row.status}"`,
         `"${row.caption.replace(/"/g, '""')}"`, // Escape double quotes
         `"${row.address?.replace(/"/g, '""') || 'N/A'}"`,
+        `"${row.deadline ? format(row.deadline.toDate(), 'yyyy-MM-dd') : ''}"`, // Format deadline or empty string
         `"${row.municipalReply?.replace(/"/g, '""') || ''}"`
       ].join(','))
     ];
@@ -232,6 +236,7 @@ export default function MunicipalReportsPage() {
                     <TableHead>Status</TableHead>
                     <TableHead>Caption</TableHead>
                     <TableHead>Address</TableHead>
+                    <TableHead>Deadline</TableHead> {/* Added Deadline Header */}
                     <TableHead>Municipal Reply</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -248,6 +253,7 @@ export default function MunicipalReportsPage() {
                       </TableCell>
                       <TableCell className="max-w-[200px] truncate" title={item.caption}>{item.caption}</TableCell>
                       <TableCell className="max-w-[200px] truncate" title={item.address}>{item.address || 'N/A'}</TableCell>
+                       <TableCell>{item.deadline ? format(item.deadline.toDate(), "PP") : 'N/A'}</TableCell> {/* Added Deadline Cell */}
                       <TableCell className="max-w-[200px] truncate" title={item.municipalReply}>{item.municipalReply || ''}</TableCell>
                     </TableRow>
                   ))}

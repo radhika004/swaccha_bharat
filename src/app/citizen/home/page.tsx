@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -5,12 +6,13 @@ import { collection, query, orderBy, onSnapshot, Timestamp, GeoPoint } from 'fir
 import { db } from '@/lib/firebase/config';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import Image from 'next/image';
-import { MapPin, MessageSquare, User } from 'lucide-react'; // Added User icon
+import { MapPin, MessageSquare, User, Clock, CalendarDays } from 'lucide-react'; // Added Clock, CalendarDays icons
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'; // Added Avatar
 import { Button } from '@/components/ui/button'; // Added Button import
+import { formatDistanceToNow } from 'date-fns'; // Import formatDistanceToNow
 
 interface Post {
   id: string;
@@ -23,10 +25,11 @@ interface Post {
   userName?: string; // Add username field
   status?: 'pending' | 'solved';
   municipalReply?: string;
+  deadline?: Timestamp; // Add deadline field
 }
 
-// Helper function to format Firestore Timestamp
-const formatDate = (timestamp: Timestamp): string => {
+// Helper function to format Firestore Timestamp (full date)
+const formatFullDate = (timestamp: Timestamp): string => {
   if (!timestamp || typeof timestamp.toDate !== 'function') {
       console.warn("Invalid timestamp received:", timestamp);
       return 'Invalid date'; // Handle potential errors if timestamp is not valid or missing
@@ -43,6 +46,36 @@ const formatDate = (timestamp: Timestamp): string => {
     console.error("Error formatting timestamp:", e, timestamp);
     return 'Error date';
   }
+};
+
+// Helper function to format date relative to now (e.g., "2 days ago")
+const formatRelativeDate = (timestamp: Timestamp): string => {
+    if (!timestamp || typeof timestamp.toDate !== 'function') {
+        return 'a while ago';
+    }
+    try {
+        return formatDistanceToNow(timestamp.toDate(), { addSuffix: true });
+    } catch (e) {
+        console.error("Error formatting relative date:", e, timestamp);
+        return 'Error date';
+    }
+};
+
+// Helper function to format deadline date
+const formatDeadline = (timestamp?: Timestamp): string | null => {
+    if (!timestamp || typeof timestamp.toDate !== 'function') {
+        return null;
+    }
+    try {
+        return timestamp.toDate().toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+        });
+    } catch (e) {
+        console.error("Error formatting deadline:", e, timestamp);
+        return 'Error date';
+    }
 };
 
 export default function CitizenHomePage() {
@@ -82,6 +115,13 @@ export default function CitizenHomePage() {
                skippedCount++;
                return; // Optionally skip, or handle differently
           }
+           // Basic type check for deadline if it exists
+          if (data.deadline && !(data.deadline instanceof Timestamp)) {
+              console.warn(`Skipping post ${doc.id} due to invalid deadline type. Received:`, data.deadline);
+              // Don't necessarily skip, just ignore the invalid deadline
+              data.deadline = undefined; // Or set to null
+          }
+
 
          postsData.push({
              id: doc.id,
@@ -93,7 +133,8 @@ export default function CitizenHomePage() {
              userId: data.userId,
              userName: data.userName || 'Anonymous User', // Provide fallback
              status: data.status || 'pending', // Provide fallback status
-             municipalReply: data.municipalReply
+             municipalReply: data.municipalReply,
+             deadline: data.deadline // Add deadline here
          });
       });
       if (skippedCount > 0) {
@@ -134,6 +175,8 @@ export default function CitizenHomePage() {
       <CardContent className="p-4 space-y-2">
         <Skeleton className="h-4 w-full bg-muted" />
         <Skeleton className="h-4 w-[80%] bg-muted" />
+        <Skeleton className="h-4 w-[60%] mt-2 bg-muted" /> {/* Location Skeleton */}
+        <Skeleton className="h-4 w-[50%] mt-2 bg-muted" /> {/* Deadline Skeleton */}
       </CardContent>
       <CardFooter className="p-4 flex justify-between items-center text-sm text-muted-foreground">
         <Skeleton className="h-4 w-[120px] bg-muted" />
@@ -188,106 +231,120 @@ export default function CitizenHomePage() {
              </CardContent>
            </Card>
         ) : (
-          posts.map((post, index) => (
-            <Card key={post.id || index} className="w-full max-w-lg mx-auto overflow-hidden shadow-md rounded-lg border border-border transition-shadow duration-300 hover:shadow-lg">
-              <CardHeader className="p-4 flex items-center justify-between bg-card">
-                 {/* User Info */}
-                 <div className="flex items-center space-x-3">
-                    <Avatar className="h-10 w-10 border border-border">
-                        {/* Add AvatarImage if you store profile pics */}
-                        <AvatarFallback className="bg-secondary"><User className="h-5 w-5 text-muted-foreground"/></AvatarFallback>
-                    </Avatar>
-                    <div>
-                        <p className="text-sm font-medium text-foreground">{post.userName || 'Anonymous User'}</p>
-                        <p className="text-xs text-muted-foreground">{formatDate(post.timestamp)}</p>
-                    </div>
-                 </div>
-                  {/* Status Badge */}
-                 <div>
-                    {post.status === 'solved' ? (
-                        <span className="text-xs font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded-full inline-block border border-green-200">
-                        Solved
-                        </span>
-                    ) : (
-                        <span className="text-xs font-semibold text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full inline-block border border-orange-200">
-                        Pending
-                        </span>
-                    )}
-                 </div>
-              </CardHeader>
-              {post.imageUrl ? (
-                <div className="relative w-full h-[300px] md:h-[400px] bg-muted">
-                  <Image
-                    src={post.imageUrl}
-                    alt={post.caption || 'Issue Image'}
-                    fill // Use fill instead of layout="fill"
-                    style={{ objectFit: 'cover' }} // Use style prop for objectFit
-                    priority={index < 3} // Prioritize loading first few images
-                    sizes="(max-width: 640px) 100vw, (max-width: 768px) 90vw, 512px" // Provide sizes prop
-                    onError={(e) => console.error(`Error loading image: ${post.imageUrl}`, e.currentTarget.srcset)}
-                    unoptimized={false} // Ensure optimization is enabled unless specifically needed otherwise
-                  />
-                </div>
-              ) : (
-                 <div className="w-full h-[300px] md:h-[400px] bg-muted flex items-center justify-center text-muted-foreground">
-                     <span>Image not available</span>
-                 </div>
-              )}
-              <CardContent className="p-4 bg-card">
-                <p className="text-foreground mb-2 whitespace-pre-wrap">{post.caption || '(No caption provided)'}</p>
-                 {post.address ? (
-                    <div className="flex items-center text-sm text-muted-foreground mt-2">
-                    <MapPin className="h-4 w-4 mr-1.5 flex-shrink-0" />
-                    <span>{post.address}</span>
-                    {/* Optional: Link to map */}
-                     {post.location && (
-                        <a
-                        href={`https://www.google.com/maps?q=${post.location.latitude},${post.location.longitude}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="ml-2 text-accent hover:underline text-xs"
-                        aria-label="View location on Google Maps"
-                        >
-                        (View Map)
-                        </a>
-                    )}
-                    </div>
-                 ) : post.location ? (
-                      <div className="flex items-center text-sm text-muted-foreground mt-2">
-                         <MapPin className="h-4 w-4 mr-1.5 flex-shrink-0" />
-                         <span>Lat: {post.location.latitude.toFixed(4)}, Lon: {post.location.longitude.toFixed(4)}</span>
-                           <a
-                            href={`https://www.google.com/maps?q=${post.location.latitude},${post.location.longitude}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="ml-2 text-accent hover:underline text-xs"
-                            aria-label="View location on Google Maps"
-                            >
-                            (View Map)
-                            </a>
-                     </div>
-                 ) : (
-                      <div className="flex items-center text-sm text-muted-foreground mt-2">
-                         <MapPin className="h-4 w-4 mr-1.5 text-gray-400 flex-shrink-0" />
-                         <span>Location not provided</span>
-                     </div>
-                 )}
-                {post.municipalReply && (
-                  <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-md">
-                    <p className="text-sm font-semibold text-green-800 mb-1">Municipal Response:</p>
-                    <p className="text-sm text-green-700 whitespace-pre-wrap">{post.municipalReply}</p>
+          posts.map((post, index) => {
+            const formattedDeadline = formatDeadline(post.deadline);
+            return (
+              <Card key={post.id || index} className="w-full max-w-lg mx-auto overflow-hidden shadow-md rounded-lg border border-border transition-shadow duration-300 hover:shadow-lg">
+                <CardHeader className="p-4 flex items-center justify-between bg-card">
+                   {/* User Info */}
+                   <div className="flex items-center space-x-3">
+                      <Avatar className="h-10 w-10 border border-border">
+                          {/* Add AvatarImage if you store profile pics */}
+                          <AvatarFallback className="bg-secondary"><User className="h-5 w-5 text-muted-foreground"/></AvatarFallback>
+                      </Avatar>
+                      <div>
+                          <p className="text-sm font-medium text-foreground">{post.userName || 'Anonymous User'}</p>
+                          <p className="text-xs text-muted-foreground" title={formatFullDate(post.timestamp)}>
+                            <Clock className="inline h-3 w-3 mr-0.5 relative -top-px" />
+                            {formatRelativeDate(post.timestamp)}
+                          </p>
+                      </div>
+                   </div>
+                    {/* Status Badge */}
+                   <div>
+                      {post.status === 'solved' ? (
+                          <span className="text-xs font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded-full inline-block border border-green-200">
+                          Solved
+                          </span>
+                      ) : (
+                          <span className="text-xs font-semibold text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full inline-block border border-orange-200">
+                          Pending
+                          </span>
+                      )}
+                   </div>
+                </CardHeader>
+                {post.imageUrl ? (
+                  <div className="relative w-full h-[300px] md:h-[400px] bg-muted">
+                    <Image
+                      src={post.imageUrl}
+                      alt={post.caption || 'Issue Image'}
+                      fill // Use fill instead of layout="fill"
+                      style={{ objectFit: 'cover' }} // Use style prop for objectFit
+                      priority={index < 3} // Prioritize loading first few images
+                      sizes="(max-width: 640px) 100vw, (max-width: 768px) 90vw, 512px" // Provide sizes prop
+                      onError={(e) => console.error(`Error loading image: ${post.imageUrl}`, e.currentTarget.srcset)}
+                      unoptimized={false} // Ensure optimization is enabled unless specifically needed otherwise
+                    />
                   </div>
+                ) : (
+                   <div className="w-full h-[300px] md:h-[400px] bg-muted flex items-center justify-center text-muted-foreground">
+                       <span>Image not available</span>
+                   </div>
                 )}
-              </CardContent>
-              {/* Add footer for actions like comments if needed */}
-              {/* Example Footer:
-              <CardFooter className="p-4 flex justify-start items-center text-sm text-muted-foreground border-t border-border bg-card">
-                 <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
-                   <MessageSquare className="h-4 w-4 mr-1" /> Comment
-                 </Button>
-              </CardFooter> */}
-            </Card>
-          ))
+                <CardContent className="p-4 bg-card space-y-2">
+                  <p className="text-foreground whitespace-pre-wrap">{post.caption || '(No caption provided)'}</p>
+                   {post.address ? (
+                      <div className="flex items-center text-sm text-muted-foreground">
+                      <MapPin className="h-4 w-4 mr-1.5 flex-shrink-0" />
+                      <span>{post.address}</span>
+                      {/* Optional: Link to map */}
+                       {post.location && (
+                          <a
+                          href={`https://www.google.com/maps?q=${post.location.latitude},${post.location.longitude}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="ml-2 text-accent hover:underline text-xs"
+                          aria-label="View location on Google Maps"
+                          >
+                          (View Map)
+                          </a>
+                      )}
+                      </div>
+                   ) : post.location ? (
+                        <div className="flex items-center text-sm text-muted-foreground">
+                           <MapPin className="h-4 w-4 mr-1.5 flex-shrink-0" />
+                           <span>Lat: {post.location.latitude.toFixed(4)}, Lon: {post.location.longitude.toFixed(4)}</span>
+                             <a
+                              href={`https://www.google.com/maps?q=${post.location.latitude},${post.location.longitude}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="ml-2 text-accent hover:underline text-xs"
+                              aria-label="View location on Google Maps"
+                              >
+                              (View Map)
+                              </a>
+                       </div>
+                   ) : (
+                        <div className="flex items-center text-sm text-muted-foreground">
+                           <MapPin className="h-4 w-4 mr-1.5 text-gray-400 flex-shrink-0" />
+                           <span>Location not provided</span>
+                       </div>
+                   )}
+                    {/* Display Deadline */}
+                    {formattedDeadline && (
+                        <div className="flex items-center text-sm text-muted-foreground">
+                            <CalendarDays className="h-4 w-4 mr-1.5 flex-shrink-0 text-red-600" />
+                            <span className="text-red-700 font-medium">Deadline: {formattedDeadline}</span>
+                        </div>
+                    )}
+
+                  {post.municipalReply && (
+                    <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-md">
+                      <p className="text-sm font-semibold text-green-800 mb-1">Municipal Response:</p>
+                      <p className="text-sm text-green-700 whitespace-pre-wrap">{post.municipalReply}</p>
+                    </div>
+                  )}
+                </CardContent>
+                {/* Add footer for actions like comments if needed */}
+                {/* Example Footer:
+                <CardFooter className="p-4 flex justify-start items-center text-sm text-muted-foreground border-t border-border bg-card">
+                   <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+                     <MessageSquare className="h-4 w-4 mr-1" /> Comment
+                   </Button>
+                </CardFooter> */}
+              </Card>
+            )
+          })
         )}
       </div>
     </div>

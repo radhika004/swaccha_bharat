@@ -1,8 +1,9 @@
+
 'use client';
 
 import React, { useState, useRef, type ChangeEvent, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { collection, addDoc, serverTimestamp, GeoPoint } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, GeoPoint, Timestamp } from 'firebase/firestore'; // Added Timestamp
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage, auth } from '@/lib/firebase/config';
 import { Button } from '@/components/ui/button';
@@ -11,9 +12,13 @@ import { Textarea } from '@/components/ui/textarea'; // Use Textarea for caption
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Loader2, Camera, MapPin, LocateFixed } from 'lucide-react';
+import { Loader2, Camera, MapPin, LocateFixed, Calendar as CalendarIcon } from 'lucide-react'; // Added CalendarIcon
 import Image from 'next/image';
 import { useToast } from '@/hooks/use-toast';
+import { Calendar } from "@/components/ui/calendar"; // Import Calendar component
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"; // Import Popover components
+import { format } from 'date-fns'; // Import format function
+import { cn } from '@/lib/utils'; // Import cn utility
 
 interface Location {
   latitude: number;
@@ -45,6 +50,7 @@ export default function AddPostPage() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [location, setLocation] = useState<Location | null>(null);
   const [address, setAddress] = useState<string | null>(null);
+  const [deadline, setDeadline] = useState<Date | undefined>(undefined); // State for deadline
   const [isLocating, setIsLocating] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -201,6 +207,14 @@ export default function AddPostPage() {
            console.log("No address data provided.");
       }
 
+       // Add deadline if selected
+       if (deadline) {
+        postData.deadline = Timestamp.fromDate(deadline);
+        console.log("Deadline Timestamp added:", postData.deadline);
+       } else {
+           console.log("No deadline provided.");
+       }
+
       console.log("Final post data object being sent to Firestore:", postData);
       // 3. Add Post Data to Firestore
       const docRef = await addDoc(collection(db, 'posts'), postData);
@@ -244,7 +258,7 @@ export default function AddPostPage() {
           <form id="add-post-form" onSubmit={handleSubmit} className="space-y-6">
              {/* Image Upload */}
              <div>
-                <Label htmlFor="image" className="mb-2 block font-medium">Issue Image</Label>
+                <Label htmlFor="image" className="mb-2 block font-medium">Issue Image *</Label>
                 <Input
                     id="image"
                     type="file"
@@ -253,6 +267,7 @@ export default function AddPostPage() {
                     accept="image/*" // Accept only image files
                     capture="environment" // Prefer back camera on mobile
                     className="hidden" // Hide the default input
+                    required // Mark as required
                 />
                  <Button
                     type="button"
@@ -272,13 +287,13 @@ export default function AddPostPage() {
 
               {/* Caption */}
               <div>
-                <Label htmlFor="caption" className="font-medium">Caption</Label>
+                <Label htmlFor="caption" className="font-medium">Caption *</Label>
                 <Textarea
                   id="caption"
                   placeholder="Describe the issue (e.g., Overflowing bin near park entrance)"
                   value={caption}
                   onChange={(e) => setCaption(e.target.value)}
-                  required
+                  required // Mark as required
                   className="mt-1 min-h-[100px]"
                   maxLength={500} // Optional: set max length
                 />
@@ -311,6 +326,36 @@ export default function AddPostPage() {
                     </p>
                  )}
             </div>
+
+             {/* Deadline Picker */}
+             <div>
+                <Label htmlFor="deadline" className="font-medium">Resolution Deadline (Optional)</Label>
+                <Popover>
+                    <PopoverTrigger asChild>
+                        <Button
+                        id="deadline"
+                        variant={"outline"}
+                        className={cn(
+                            "w-full justify-start text-left font-normal mt-1",
+                            !deadline && "text-muted-foreground"
+                        )}
+                        >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {deadline ? format(deadline, "PPP") : <span>Pick a desired resolution date</span>}
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                        <Calendar
+                        mode="single"
+                        selected={deadline}
+                        onSelect={setDeadline}
+                        initialFocus
+                        disabled={(date) => date < new Date(new Date().setDate(new Date().getDate() - 1))} // Disable past dates
+                        />
+                    </PopoverContent>
+                </Popover>
+             </div>
+
 
              {/* Submit Button moved to CardFooter */}
           </form>
