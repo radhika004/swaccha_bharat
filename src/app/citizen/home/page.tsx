@@ -82,6 +82,10 @@ export default function CitizenHomePage() {
       setLoading(false);
     }, (err) => {
       console.error("Error fetching posts: ", err);
+      // Log the specific error details
+      console.error("Firestore error code:", err.code);
+      console.error("Firestore error message:", err.message);
+      console.error("Firestore error stack:", err.stack);
       setError(`Failed to load posts. Please check your connection and permissions. (Code: ${err.code})`);
       setLoading(false);
     });
