@@ -33,6 +33,8 @@ import {
   LocateFixed,
   Calendar as CalendarIcon,
   AlertCircle,
+  Video,
+  VideoOff,
 } from 'lucide-react';
 import Image from 'next/image';
 import { useToast } from '@/hooks/use-toast';
@@ -77,15 +79,68 @@ export default function AddPostPage() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [location, setLocation] = useState<Location | null>(null);
   const [address, setAddress] = useState<string | null>(null);
-  const [deadline, setDeadline] = useState<Date | undefined>(undefined); // State for deadline
+  const [deadline, setDeadline] = useState<Date | undefined>(undefined);
   const [isLocating, setIsLocating] = useState(false);
-  const [isLoading, setIsLoading] = useState(false); // This state manages the overall submission loading
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null); // Ref for video element
+  const canvasRef = useRef<HTMLCanvasElement>(null); // Ref for canvas to capture snapshot
+  const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
+  const [showCameraPreview, setShowCameraPreview] = useState(false);
+  const [stream, setStream] = useState<MediaStream | null>(null); // Store the stream
+
   const router = useRouter();
   const { toast } = useToast();
 
+  // Request camera permission on component mount
+  useEffect(() => {
+    const getCameraPermission = async () => {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+         console.warn('Camera API not supported in this browser.');
+         setHasCameraPermission(false);
+         // No toast here, let user proceed with file upload
+         return;
+      }
+      try {
+        const mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }); // Prioritize rear camera
+        setStream(mediaStream); // Store the stream
+        setHasCameraPermission(true);
+        console.log("Camera permission granted.");
+        if (videoRef.current) {
+          videoRef.current.srcObject = mediaStream;
+        }
+      } catch (err) {
+        console.error('Error accessing camera:', err);
+        setHasCameraPermission(false);
+        // Only show toast if user explicitly tries to use camera later?
+        // toast({
+        //   variant: 'destructive',
+        //   title: 'Camera Access Denied',
+        //   description: 'Please enable camera permissions to take a photo directly.',
+        // });
+      }
+    };
+
+    getCameraPermission();
+
+     // Cleanup function to stop the stream when component unmounts
+     return () => {
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+            console.log("Camera stream stopped.");
+        }
+    };
+  }, []); // Empty dependency array ensures this runs only once on mount
+
   const handleImageChange = (e: ChangeEvent<HTMLInputElement>) => {
+    setShowCameraPreview(false); // Hide camera preview if a file is selected
+     if (stream) { // Stop camera stream if file upload is chosen
+        stream.getTracks().forEach(track => track.stop());
+        setStream(null);
+        if (videoRef.current) videoRef.current.srcObject = null;
+    }
+
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       console.log('Image selected:', file.name, file.size, file.type);
@@ -96,15 +151,19 @@ export default function AddPostPage() {
           description: 'Please select a valid image file.',
           variant: 'destructive',
         });
+         setImageFile(null); // Clear invalid file
+         setImagePreview(null); // Clear preview
         return;
       }
-      if (file.size > 5 * 1024 * 1024) { // ~5MB limit
-        setError('Image size should not exceed 5MB.');
+      if (file.size > 10 * 1024 * 1024) { // Increased limit to 10MB
+        setError('Image size should not exceed 10MB.');
         toast({
           title: 'File Too Large',
-          description: 'Image size should not exceed 5MB.',
+          description: 'Image size should not exceed 10MB.',
           variant: 'destructive',
         });
+         setImageFile(null); // Clear invalid file
+         setImagePreview(null); // Clear preview
         return;
       }
 
@@ -112,15 +171,118 @@ export default function AddPostPage() {
       const reader = new FileReader();
       reader.onloadend = () => {
         setImagePreview(reader.result as string);
-        console.log('Image preview generated.');
+        console.log('Image preview generated from file.');
       };
       reader.readAsDataURL(file);
       setError(null);
     }
   };
 
+   const handleTakePhotoClick = () => {
+    if (hasCameraPermission === false) {
+        toast({ title: "Camera Required", description: "Camera access is needed to take a photo. Please grant permission or upload a file.", variant: "destructive" });
+        return;
+    }
+    if (hasCameraPermission === null) {
+        toast({ title: "Camera Status Unknown", description: "Waiting for camera permission..."});
+        return;
+    }
+    // Clear any previously selected file/preview
+    setImageFile(null);
+    setImagePreview(null);
+    setError(null);
+    setShowCameraPreview(true); // Show the video feed
+     // Ensure stream is active
+     if (!stream && videoRef.current && hasCameraPermission) {
+         navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+         .then(newStream => {
+             setStream(newStream);
+             if(videoRef.current) videoRef.current.srcObject = newStream;
+         })
+         .catch(err => console.error("Error reactivating camera:", err));
+     }
+  };
+
+   const handleCapturePhoto = () => {
+    if (!videoRef.current || !canvasRef.current || !stream) {
+        setError("Camera feed not available or stream not active.");
+        console.error("Capture failed: Video or canvas ref missing or stream inactive.");
+        return;
+    }
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const context = canvas.getContext('2d');
+
+    if (!context) {
+        setError("Could not get canvas context.");
+        console.error("Capture failed: Canvas context unavailable.");
+        return;
+    }
+
+     // Set canvas dimensions to match video element's display size
+     const displayWidth = video.clientWidth;
+     const displayHeight = video.clientHeight;
+     canvas.width = displayWidth;
+     canvas.height = displayHeight;
+
+    console.log(`Canvas dimensions set to: ${displayWidth}x${displayHeight}`);
+    console.log(`Video dimensions: natural ${video.videoWidth}x${video.videoHeight}, display ${displayWidth}x${displayHeight}`);
+
+
+    // Draw the current video frame onto the canvas
+    // Use videoWidth/videoHeight for source, scale to canvas width/height
+    try {
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        console.log("Image drawn onto canvas.");
+    } catch (drawError) {
+         console.error("Error drawing image on canvas:", drawError);
+         setError("Failed to capture frame from video.");
+         return;
+    }
+
+
+    // Convert canvas to data URL (JPEG format with quality 0.9)
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+    console.log("Canvas converted to data URL (first 50 chars):", dataUrl.substring(0, 50));
+    setImagePreview(dataUrl); // Show the captured photo as preview
+
+    // Convert data URL to Blob/File object
+    fetch(dataUrl)
+      .then(res => res.blob())
+      .then(blob => {
+        if (blob) {
+            const imageFileName = `capture_${Date.now()}.jpg`;
+            const capturedFile = new File([blob], imageFileName, { type: 'image/jpeg' });
+            setImageFile(capturedFile);
+            console.log("Captured image converted to File object:", capturedFile.name, capturedFile.size);
+            setShowCameraPreview(false); // Hide camera feed after capture
+            // Stop the stream after capture
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                console.log("Camera stream stopped after capture.");
+                setStream(null); // Clear stream state
+                if (videoRef.current) videoRef.current.srcObject = null; // Clear video src
+            }
+        } else {
+            throw new Error("Failed to create blob from data URL");
+        }
+      })
+       .catch(err => {
+          console.error("Error converting data URL to file:", err);
+          setError("Failed to process captured image.");
+       });
+  };
+
+
   const triggerFileInput = () => {
     console.log('Triggering file input click.');
+    setShowCameraPreview(false); // Hide camera if file input is triggered
+    if (stream) { // Stop camera stream if file upload is chosen
+        stream.getTracks().forEach(track => track.stop());
+        setStream(null);
+        if (videoRef.current) videoRef.current.srcObject = null;
+    }
     fileInputRef.current?.click();
   };
 
@@ -155,7 +317,7 @@ export default function AddPostPage() {
         setIsLocating(false);
         toast({
           title: 'Location Added',
-          description: `Location set: ${fetchedAddress}`,
+          description: `Location set: ${fetchedAddress || 'Coordinates saved'}`,
         });
       },
       (err) => {
@@ -177,7 +339,7 @@ export default function AddPostPage() {
         });
         setIsLocating(false);
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 } // Options
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 } // Increased timeout
     );
   };
 
@@ -202,10 +364,10 @@ export default function AddPostPage() {
 
     console.log('Checking for image file...');
     if (!imageFile) {
-      setError('Please select an image.');
+      setError('Please select or capture an image.');
       toast({
         title: 'Missing Image',
-        description: 'Please select an image to upload.',
+        description: 'Please select or capture an image to upload.',
         variant: 'destructive',
       });
       console.error('Image file missing during post attempt.');
@@ -245,16 +407,21 @@ export default function AddPostPage() {
         userName:
           auth.currentUser.displayName ||
           auth.currentUser.phoneNumber ||
-          'Anonymous User',
+          'Anonymous User', // Fallback username
         imageUrl: imageUrl,
         caption: caption.trim(),
         timestamp: serverTimestamp(),
-        status: 'pending',
+        status: 'pending', // Default status
       };
 
       if (location) {
-        postData.location = new GeoPoint(location.latitude, location.longitude);
-        console.log('Location GeoPoint added:', postData.location);
+        // Ensure location has valid numbers before creating GeoPoint
+        if (typeof location.latitude === 'number' && typeof location.longitude === 'number') {
+           postData.location = new GeoPoint(location.latitude, location.longitude);
+           console.log('Location GeoPoint added:', postData.location);
+        } else {
+            console.warn("Invalid location data, skipping GeoPoint:", location);
+        }
       }
       if (address) {
         postData.address = address;
@@ -271,12 +438,14 @@ export default function AddPostPage() {
         'Post submitted successfully to Firestore! Document ID:',
         docRef.id
       );
-      console.log('Post data saved:', postData); // Verify saved data
+      // Log the actual data saved for verification
+       console.log('Post data saved:', postData); // Verify saved data
+
 
       toast({ title: 'Success!', description: 'Your issue has been reported.' });
 
       console.log('Navigating to /citizen/home...');
-      router.push('/citizen/home');
+       router.push('/citizen/home'); // Navigate after successful submission
 
     } catch (err: any) {
       console.error('Error submitting post:', err);
@@ -285,16 +454,16 @@ export default function AddPostPage() {
         console.error(`Firebase Error Message: ${err.message}`);
       }
       setError(
-        `Failed to submit post: ${err.message}. Please check console for details.`
+        `Failed to submit post: ${err.message || 'Unknown error'}. Check console for details.`
       );
       toast({
         title: 'Submission Failed',
-        description: `Error: ${err.message}`,
+        description: `Error: ${err.message || 'Could not submit the post.'}`,
         variant: 'destructive',
       });
       setIsLoading(false); // Stop loading ONLY on error
     }
-    // Do not set isLoading to false here on success, navigation handles it.
+    // Do NOT set isLoading to false here on success, navigation handles transition
   };
 
   return (
@@ -305,7 +474,7 @@ export default function AddPostPage() {
             Report an Issue
           </CardTitle>
           <CardDescription className="text-center">
-            Upload a picture and describe the cleanliness issue.
+            Upload or take a picture and describe the cleanliness issue.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -317,42 +486,75 @@ export default function AddPostPage() {
             </Alert>
           )}
           <form id="add-post-form" onSubmit={handleSubmit} className="space-y-6">
-            {/* Image Upload */}
+            {/* Image Upload / Camera */}
             <div>
               <Label htmlFor="image" className="mb-2 block font-medium">
                 Issue Image *
               </Label>
+              {/* Hidden File Input */}
               <Input
                 id="image"
                 type="file"
                 ref={fileInputRef}
                 onChange={handleImageChange}
                 accept="image/*"
-                capture="environment"
                 className="hidden"
-                required
+                // Removed 'required' from hidden input, validation happens in submit handler
               />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={triggerFileInput}
-                className="w-full border-dashed border-primary text-primary hover:bg-primary/10 flex items-center justify-center py-6"
-              >
-                <Camera className="h-6 w-6 mr-2" />
-                <span>
-                  {imagePreview
-                    ? 'Change Photo'
-                    : 'Click to Upload or Take Photo'}
-                </span>
-              </Button>
-              {imagePreview && (
-                <div className="mt-4 border rounded-md overflow-hidden aspect-video relative">
+               {/* Hidden Canvas for Capturing Photo */}
+               <canvas ref={canvasRef} className="hidden"></canvas>
+
+                {/* Camera Preview Area */}
+                <div className={cn("mt-2", !showCameraPreview && "hidden")}>
+                    <video ref={videoRef} className="w-full aspect-video rounded-md bg-muted" autoPlay muted playsInline />
+                    {hasCameraPermission === false && (
+                        <Alert variant="destructive" className="mt-2">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertTitle>Camera Access Denied</AlertTitle>
+                        <AlertDescription>
+                            Cannot access camera. Please grant permission or upload a file.
+                        </AlertDescription>
+                        </Alert>
+                    )}
+                     <Button type="button" onClick={handleCapturePhoto} className="w-full mt-2 bg-accent hover:bg-accent/90">
+                       <Camera className="mr-2 h-4 w-4" /> Capture Photo
+                     </Button>
+                </div>
+
+
+              {/* Buttons for Upload/Take Photo */}
+               <div className={cn("mt-2 grid grid-cols-2 gap-2", showCameraPreview && "hidden")}>
+                 <Button
+                    type="button"
+                    variant="outline"
+                    onClick={triggerFileInput}
+                    className="border-dashed border-primary text-primary hover:bg-primary/10 flex items-center justify-center py-3"
+                  >
+                    <Camera className="h-5 w-5 mr-2" />
+                    <span>Upload Photo</span>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleTakePhotoClick}
+                     disabled={hasCameraPermission === false || hasCameraPermission === null}
+                    className="border-dashed border-accent text-accent hover:bg-accent/10 flex items-center justify-center py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                     {hasCameraPermission === false ? <VideoOff className="h-5 w-5 mr-2"/> : <Video className="h-5 w-5 mr-2"/>}
+                    <span>Take Photo</span>
+                  </Button>
+              </div>
+
+              {/* Image Preview */}
+              {imagePreview && !showCameraPreview && (
+                <div className="mt-4 border rounded-md overflow-hidden aspect-video relative bg-muted">
                   <Image
                     src={imagePreview}
                     alt="Selected preview"
                     fill
-                    style={{ objectFit: 'cover' }}
-                    priority
+                    style={{ objectFit: 'contain' }} // Use contain to see full image
+                    priority // Prioritize loading preview
+                    sizes="(max-width: 640px) 100vw, 512px"
                   />
                 </div>
               )}
@@ -453,7 +655,7 @@ export default function AddPostPage() {
             type="submit"
             form="add-post-form"
             className="w-full bg-primary hover:bg-primary/90"
-            disabled={isLoading || !imageFile || !caption.trim()}
+            disabled={isLoading || !imageFile || !caption.trim()} // Disable if no image OR no caption
           >
             {isLoading ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -479,6 +681,3 @@ export default function AddPostPage() {
     </div>
   );
 }
-
-
-    

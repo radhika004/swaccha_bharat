@@ -113,10 +113,10 @@ export default function CitizenHomePage() {
                skippedCount++;
                return;
           }
-          if (data.deadline && !(data.deadline instanceof Timestamp)) {
-              console.warn(`Skipping post ${doc.id} due to invalid deadline type. Received:`, data.deadline);
-              data.deadline = undefined;
-          }
+           if (data.deadline && !(data.deadline instanceof Timestamp)) {
+               console.warn(`Skipping post ${doc.id} due to invalid deadline type. Received:`, data.deadline);
+               data.deadline = undefined; // Treat invalid deadline as undefined
+           }
 
 
          postsData.push({
@@ -238,13 +238,14 @@ export default function CitizenHomePage() {
                 <CardHeader className="p-3 flex items-center justify-between bg-card border-b sm:border-none">
                    <div className="flex items-center space-x-3">
                       <Avatar className="h-9 w-9 border border-border">
+                          {/* Add AvatarImage if user profile pics are stored */}
                           <AvatarFallback className="bg-secondary text-xs"><User className="h-4 w-4 text-muted-foreground"/></AvatarFallback>
                       </Avatar>
                       <div>
                           <p className="text-sm font-medium text-foreground">{post.userName || 'Anonymous User'}</p>
                           {/* Show address or relative location in header if available */}
                           {post.address ? (
-                              <p className="text-xs text-muted-foreground truncate max-w-[200px]" title={post.address}>
+                              <p className="text-xs text-muted-foreground truncate max-w-[200px] hover:max-w-none hover:whitespace-normal" title={post.address}>
                                   <MapPin className="inline h-3 w-3 mr-0.5 relative -top-px" />
                                   {post.address.split(',')[0]} {/* Show first part of address */}
                               </p>
@@ -252,8 +253,9 @@ export default function CitizenHomePage() {
                              <p className="text-xs text-muted-foreground">
                                 <MapPin className="inline h-3 w-3 mr-0.5 relative -top-px" />
                                 Near {post.location.latitude.toFixed(2)}, {post.location.longitude.toFixed(2)}
+                                 <a href={`https://www.google.com/maps?q=${post.location.latitude},${post.location.longitude}`} target="_blank" rel="noopener noreferrer" className="ml-1 text-accent hover:underline" aria-label="View location on Google Maps">(Map)</a>
                              </p>
-                          ) : null}
+                          ) : <p className="text-xs text-muted-foreground italic">Location not provided</p>}
                       </div>
                    </div>
                    {/* Status Icon (optional, can be moved below) */}
@@ -273,11 +275,11 @@ export default function CitizenHomePage() {
                       src={post.imageUrl}
                       alt={post.caption || 'Issue Image'}
                       fill
-                      style={{ objectFit: 'cover' }}
-                      priority={index < 3}
-                      sizes="(max-width: 640px) 100vw, 512px"
+                      style={{ objectFit: 'cover' }} // Use cover for better fill
+                      priority={index < 3} // Prioritize loading first few images
+                      sizes="(max-width: 640px) 100vw, 512px" // Responsive image sizes
                       onError={(e) => console.error(`Error loading image: ${post.imageUrl}`, e.currentTarget.srcset)}
-                      unoptimized={false}
+                      // Consider adding placeholder="blur" and blurDataURL if generating previews
                     />
                   </div>
                 ) : (
@@ -290,18 +292,19 @@ export default function CitizenHomePage() {
                 <CardContent className="p-3 bg-card space-y-2">
                     {/* Action Icons */}
                     <div className="flex items-center space-x-3 mb-2">
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-accent/10 rounded-full">
                             <Heart className="h-5 w-5"/>
                             <span className="sr-only">Like</span>
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-accent/10 rounded-full">
                              <MessageCircle className="h-5 w-5"/>
                             <span className="sr-only">Comment</span>
                         </Button>
-                         <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+                         <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-accent/10 rounded-full">
                              <Send className="h-5 w-5"/>
                              <span className="sr-only">Share</span>
                         </Button>
+                         {/* Maybe a bookmark icon on the right */}
                     </div>
 
                   {/* Caption */}
@@ -310,22 +313,9 @@ export default function CitizenHomePage() {
                     <span className="ml-1 whitespace-pre-wrap">{post.caption || '(No caption provided)'}</span>
                   </p>
 
-                  {/* Location Details (Optional - uncomment if needed here) */}
-                  {/* {post.address ? (
-                      <div className="flex items-center text-xs text-muted-foreground">
-                         <MapPin className="h-3 w-3 mr-1 flex-shrink-0" />
-                         <span>{post.address}</span>
-                         {post.location && (
-                             <a href={`https://www.google.com/maps?q=${post.location.latitude},${post.location.longitude}`} target="_blank" rel="noopener noreferrer" className="ml-1.5 text-accent hover:underline" aria-label="View location on Google Maps">(View Map)</a>
-                         )}
-                      </div>
-                   ) : post.location && (
-                       <div className="flex items-center text-xs text-muted-foreground">
-                          <MapPin className="h-3 w-3 mr-1 flex-shrink-0" />
-                          <span>Lat: {post.location.latitude.toFixed(4)}, Lon: {post.location.longitude.toFixed(4)}</span>
-                          <a href={`https://www.google.com/maps?q=${post.location.latitude},${post.location.longitude}`} target="_blank" rel="noopener noreferrer" className="ml-1.5 text-accent hover:underline" aria-label="View location on Google Maps">(View Map)</a>
-                       </div>
-                   )} */}
+                  {/* Location Details (Removed from header, shown here if needed) */}
+                  {/* {post.address && ( ... ) } */}
+                  {/* {post.location && !post.address && ( ... ) } */}
 
                     {/* Deadline */}
                     {formattedDeadline && (
@@ -359,5 +349,3 @@ export default function CitizenHomePage() {
     </div>
   );
 }
-
-    
