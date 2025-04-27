@@ -85,79 +85,88 @@ export default function CitizenHomePage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setLoading(true);
+    console.log("CitizenHomePage: useEffect triggered. Setting up Firestore listener...");
+    setLoading(true); // Ensure loading is true at the start
     setError(null); // Clear previous errors
-    console.log("Setting up Firestore listener for posts...");
 
     const q = query(collection(db, 'posts'), orderBy('timestamp', 'desc'));
+    console.log("CitizenHomePage: Firestore query created:", q);
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      console.log(`Received snapshot with ${querySnapshot.size} documents.`);
+      console.log(`CitizenHomePage: Received snapshot. Documents count: ${querySnapshot.size}. Has pending writes: ${querySnapshot.metadata.hasPendingWrites}`);
+      if (querySnapshot.empty) {
+          console.log("CitizenHomePage: Snapshot is empty.");
+      }
       const postsData: Post[] = [];
       let skippedCount = 0;
       querySnapshot.forEach((doc) => {
+         console.log(`CitizenHomePage: Processing doc ${doc.id}...`);
          const data = doc.data();
+         console.log(`CitizenHomePage: Data for doc ${doc.id}:`, data);
          // --- Data Validation & Logging ---
          if (!data.imageUrl || !data.caption || !data.timestamp || !data.userId) {
-             console.warn(`Skipping post ${doc.id} due to missing required fields. Data:`, data);
+             console.warn(`CitizenHomePage: Skipping post ${doc.id} due to missing required fields. Data:`, data);
              skippedCount++;
              return; // Skip this post if essential data is missing
          }
           if (!(data.timestamp instanceof Timestamp)) {
-              console.warn(`Skipping post ${doc.id} due to invalid timestamp type. Received:`, data.timestamp);
+              console.warn(`CitizenHomePage: Skipping post ${doc.id} due to invalid timestamp type. Received:`, data.timestamp);
               skippedCount++;
               return;
           }
           if (data.location && !(data.location instanceof GeoPoint)) {
-               console.warn(`Skipping post ${doc.id} due to invalid location type. Received:`, data.location);
+               console.warn(`CitizenHomePage: Skipping post ${doc.id} due to invalid location type. Received:`, data.location);
                skippedCount++;
                return;
           }
            if (data.deadline && !(data.deadline instanceof Timestamp)) {
-               console.warn(`Skipping post ${doc.id} due to invalid deadline type. Received:`, data.deadline);
+               console.warn(`CitizenHomePage: Skipping post ${doc.id} due to invalid deadline type. Received:`, data.deadline);
                data.deadline = undefined; // Treat invalid deadline as undefined
            }
 
-
-         postsData.push({
-             id: doc.id,
-             imageUrl: data.imageUrl,
-             caption: data.caption,
-             location: data.location, // Keep as GeoPoint
-             address: data.address,
-             timestamp: data.timestamp,
-             userId: data.userId,
-             userName: data.userName || 'Anonymous User', // Provide fallback
-             status: data.status || 'pending', // Provide fallback status
-             municipalReply: data.municipalReply,
-             deadline: data.deadline // Add deadline here
-         });
+          const newPost: Post = {
+              id: doc.id,
+              imageUrl: data.imageUrl,
+              caption: data.caption,
+              location: data.location, // Keep as GeoPoint
+              address: data.address,
+              timestamp: data.timestamp,
+              userId: data.userId,
+              userName: data.userName || 'Anonymous User', // Provide fallback
+              status: data.status || 'pending', // Provide fallback status
+              municipalReply: data.municipalReply,
+              deadline: data.deadline // Add deadline here
+          };
+          console.log(`CitizenHomePage: Valid post created for doc ${doc.id}:`, newPost);
+          postsData.push(newPost);
       });
+
       if (skippedCount > 0) {
-          console.log(`Skipped ${skippedCount} posts due to validation issues.`);
+          console.log(`CitizenHomePage: Skipped ${skippedCount} posts due to validation issues.`);
       }
-      console.log("Processed posts data count:", postsData.length);
+      console.log("CitizenHomePage: Final processed posts data array:", postsData);
       setPosts(postsData);
-      setLoading(false); // Set loading to false after successful processing
-      console.log("State updated with posts. Loading set to false.");
+      console.log("CitizenHomePage: State updated with posts.");
+      setLoading(false); // Set loading to false ONLY after processing is complete
+      console.log("CitizenHomePage: Loading state set to false.");
+
     }, (err) => {
       // Enhanced error logging
-      console.error("Error fetching posts from Firestore: ", err);
-      console.error("Firestore error code:", err.code);
-      console.error("Firestore error message:", err.message);
-      console.error("Firestore error stack:", err.stack); // Log stack trace for more context
+      console.error("CitizenHomePage: Error fetching posts from Firestore: ", err);
+      console.error("CitizenHomePage: Firestore error code:", err.code);
+      console.error("CitizenHomePage: Firestore error message:", err.message);
+      console.error("CitizenHomePage: Firestore error stack:", err.stack); // Log stack trace for more context
       setError(`Failed to load posts. Please check your connection and permissions, or try again later. (Code: ${err.code})`);
       setLoading(false); // Ensure loading is set to false even on error
-      console.error("Error occurred in onSnapshot listener. Loading set to false.");
+      console.error("CitizenHomePage: Error occurred in onSnapshot listener. Loading set to false.");
     });
 
     // Cleanup subscription on unmount
     return () => {
-        console.log("Cleaning up Firestore listener.");
+        console.log("CitizenHomePage: Cleaning up Firestore listener.");
         unsubscribe();
     }
-    // Removed dependency array: This effect should run only once on mount to set up the listener.
-    // Re-running on state changes (like 'posts') could lead to infinite loops or unexpected behavior.
+    // No dependency array: This effect should run only once on mount to set up the listener.
   }, []);
 
   const PostCardSkeleton = () => (
@@ -185,6 +194,7 @@ export default function CitizenHomePage() {
 
 
   if (loading) {
+       console.log("CitizenHomePage: Rendering loading state.");
        return (
            <div className="container mx-auto px-4 py-6">
                <h1 className="text-3xl font-bold text-center mb-8 text-primary">Issue Feed</h1>
@@ -199,6 +209,7 @@ export default function CitizenHomePage() {
 
 
   if (error) {
+     console.log("CitizenHomePage: Rendering error state:", error);
     return (
         <div className="container mx-auto px-4 py-6">
              <Alert variant="destructive" className="max-w-lg mx-auto">
@@ -215,11 +226,12 @@ export default function CitizenHomePage() {
     );
   }
 
+   console.log(`CitizenHomePage: Rendering feed. Posts count: ${posts.length}`);
   return (
     <div className="container mx-auto px-0 sm:px-4 py-6"> {/* Removed horizontal padding on small screens */}
        <h1 className="text-3xl font-bold text-center mb-8 text-primary sr-only">Issue Feed</h1> {/* Made title screen-reader only */}
       <div className="space-y-6">
-        {posts.length === 0 ? (
+        {!loading && posts.length === 0 ? ( // Ensure loading is false before showing "No issues"
            <Card className="w-full max-w-lg mx-auto text-center p-6 shadow-md rounded-lg border border-border mt-10">
              <CardContent>
                 <p className="text-muted-foreground">No issues reported yet.</p>
@@ -281,7 +293,7 @@ export default function CitizenHomePage() {
                       style={{ objectFit: 'cover' }} // Use cover for better fill
                       priority={index < 3} // Prioritize loading first few images
                       sizes="(max-width: 640px) 100vw, 512px" // Responsive image sizes
-                      onError={(e) => console.error(`Error loading image: ${post.imageUrl}`, e.currentTarget.srcset)}
+                      onError={(e) => console.error(`CitizenHomePage: Error loading image: ${post.imageUrl}`, e.currentTarget.srcset)}
                       // Consider adding placeholder="blur" and blurDataURL if generating previews
                     />
                   </div>
