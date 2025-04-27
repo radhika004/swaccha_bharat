@@ -466,10 +466,11 @@ export default function AddPostPage() {
         description: `Error: ${err.message || 'Could not submit the post.'}`,
         variant: 'destructive',
       });
-      setIsLoading(false); // Stop loading ONLY on error
+    } finally {
+       // Ensure loading state is turned off regardless of success or failure
+       setIsLoading(false);
+       console.log('Post submission process finished (success or error).');
     }
-    // Removed finally block to ensure isLoading=false is only set on error.
-    // On success, navigation handles the transition away from the loading state.
   };
 
   return (

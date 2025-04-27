@@ -68,23 +68,34 @@ export default function MunicipalReportsPage() {
       const data: ReportData[] = [];
       querySnapshot.forEach((doc) => {
         const docData = doc.data();
-        data.push({
-           id: doc.id,
-           caption: docData.caption,
-           address: docData.address,
-           status: docData.status,
-           timestamp: docData.timestamp,
-           deadline: docData.deadline, // Include deadline
-           municipalReply: docData.municipalReply,
-        });
+        // Basic validation (optional but recommended)
+         if (docData.timestamp instanceof Timestamp) {
+             data.push({
+                id: doc.id,
+                caption: docData.caption || 'N/A', // Add fallback
+                address: docData.address,
+                status: docData.status || 'pending', // Add fallback
+                timestamp: docData.timestamp,
+                deadline: docData.deadline instanceof Timestamp ? docData.deadline : undefined, // Validate deadline
+                municipalReply: docData.municipalReply,
+             });
+         } else {
+              console.warn(`Skipping document ${doc.id} in report due to invalid timestamp.`);
+         }
       });
 
       setReportData(data);
        toast({ title: "Report Generated", description: `Found ${data.length} issues for the selected period.` });
     } catch (err: any) {
       console.error("Error generating report:", err);
-      setError(`Failed to generate report: ${err.message}`);
-      toast({ title: "Report Error", description: "Could not generate the report.", variant: "destructive" });
+       // Check for specific Firestore API disabled error
+        if (err.code === 'failed-precondition' && err.message.includes('Cloud Firestore API')) {
+            setError("Firestore API is not enabled. Please enable it in your Google Cloud console and refresh.");
+            console.error("Action needed: Enable Cloud Firestore API at https://console.developers.google.com/apis/api/firestore.googleapis.com/overview?project=" + db.app.options.projectId);
+        } else {
+           setError(`Failed to generate report: ${err.message}`);
+           toast({ title: "Report Error", description: "Could not generate the report.", variant: "destructive" });
+        }
     } finally {
       setLoading(false);
     }

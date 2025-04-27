@@ -67,7 +67,13 @@ export default function MunicipalCitizensPage() {
         setCitizens(citizenData);
       } catch (err: any) {
         console.error("Error fetching citizens:", err);
-        setError(`Failed to load citizen list: ${err.message}`);
+         // Check for specific Firestore API disabled error
+          if (err.code === 'failed-precondition' && err.message.includes('Cloud Firestore API')) {
+              setError("Firestore API is not enabled. Please enable it in your Google Cloud console and refresh.");
+              console.error("Action needed: Enable Cloud Firestore API at https://console.developers.google.com/apis/api/firestore.googleapis.com/overview?project=" + db.app.options.projectId);
+          } else {
+             setError(`Failed to load citizen list: ${err.message}`);
+          }
       } finally {
         setLoading(false);
       }

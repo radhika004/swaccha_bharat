@@ -168,7 +168,13 @@ export default function MunicipalIssuesPage() {
       setLoading(false);
     }, (err) => {
       console.error(`Error fetching posts with filter '${filter}': `, err);
-      setError(`Failed to load issues. Please try again later. (Error: ${err.code})`);
+        // Check for specific Firestore API disabled error
+         if (err.code === 'failed-precondition' && err.message.includes('Cloud Firestore API')) {
+             setError("Firestore API is not enabled. Please enable it in your Google Cloud console and refresh.");
+             console.error("Action needed: Enable Cloud Firestore API at https://console.developers.google.com/apis/api/firestore.googleapis.com/overview?project=" + db.app.options.projectId);
+         } else {
+             setError(`Failed to load issues. Please try again later. (Error: ${err.code})`);
+         }
       setLoading(false);
     });
 

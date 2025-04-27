@@ -5,8 +5,8 @@ import { collection, query, where, getCountFromServer, onSnapshot } from 'fireba
 import { db } from '@/lib/firebase/config';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AlertTriangle, CheckCircle2, ListTodo, Loader2 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'; // Using recharts
-import { ChartTooltipContent, ChartContainer, ChartTooltip } from '@/components/ui/chart'; // Added ChartTooltip import
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, TooltipProps } from 'recharts'; // Using recharts, added TooltipProps
+import { ChartTooltipContent, ChartContainer, ChartTooltip } from '@/components/ui/chart'; // Import ChartTooltip and Content
 import type { ChartConfig } from '@/components/ui/chart'; // Import ChartConfig type
 
 interface IssueStats {
@@ -37,6 +37,9 @@ export default function MunicipalDashboardPage() {
   const [chartData, setChartData] = useState(chartDataExample); // Use example data for now
 
   useEffect(() => {
+    setLoading(true); // Set loading to true at the beginning
+    setError(null); // Clear previous errors
+
     const fetchCounts = async () => {
       try {
         const postsCol = collection(db, 'posts');
@@ -60,42 +63,110 @@ export default function MunicipalDashboardPage() {
         });
       } catch (err: any) { // Specify 'any' type for caught error
         console.error("Error fetching issue counts: ", err);
-        setError("Failed to load dashboard statistics.");
+        // Check for specific Firestore API disabled error
+        if (err.code === 'failed-precondition' && err.message.includes('Cloud Firestore API')) {
+             setError("Firestore API is not enabled. Please enable it in your Google Cloud console.");
+             // Provide link or instructions if possible
+             console.error("Action needed: Enable Cloud Firestore API at https://console.developers.google.com/apis/api/firestore.googleapis.com/overview?project=" + db.app.options.projectId);
+         } else {
+            setError("Failed to load dashboard statistics.");
+         }
+
       } finally {
-        setLoading(false);
+        // Only set loading to false here if not using realtime listeners below
+        // setLoading(false);
       }
     };
 
      fetchCounts();
 
-      // Optional: Set up real-time listeners for counts if needed (can be resource-intensive)
+      // Set up real-time listeners for counts (more efficient than re-fetching all counts)
       const postsCol = collection(db, 'posts');
-      const unsubscribeTotal = onSnapshot(postsCol, (snap) => {
-           setStats(prev => ({ ...prev, total: snap.size }));
-           // Recalculate pending if needed, or rely on separate listeners
-      }, (err) => console.error("Total count listener error:", err));
-
-      const solvedQuery = query(postsCol, where('status', '==', 'solved'));
-      const unsubscribeSolved = onSnapshot(solvedQuery, (snap) => {
-          setStats(prev => ({ ...prev, solved: snap.size }));
-          // Recalculate pending if needed
-      }, (err) => console.error("Solved count listener error:", err));
-
-      const pendingQuery = query(postsCol, where('status', '==', 'pending'));
-       const unsubscribePending = onSnapshot(pendingQuery, (snap) => {
-          setStats(prev => ({ ...prev, pending: snap.size }));
-      }, (err) => console.error("Pending count listener error:", err));
+      let initialLoadComplete = false; // Flag to track initial stats load
 
 
-       // Cleanup listeners on unmount
-       return () => {
-           unsubscribeTotal();
-           unsubscribeSolved();
-           unsubscribePending();
-       };
+      const setupListeners = () => {
+        const listeners: (() => void)[] = []; // Array to hold unsubscribe functions
+
+        // Listener for ALL posts (to get total count efficiently)
+        const unsubscribeTotal = onSnapshot(postsCol, (snap) => {
+             const totalCount = snap.size;
+             setStats(prev => {
+                const newStats = { ...prev, total: totalCount };
+                // If solved is known, recalculate pending based on total
+                if (prev.solved !== undefined) {
+                   newStats.pending = totalCount - prev.solved;
+                }
+                 return newStats;
+             });
+              // Mark initial load complete after first total count snapshot
+             if (!initialLoadComplete && stats.solved !== undefined && stats.pending !== undefined) {
+                  setLoading(false);
+                  initialLoadComplete = true;
+              }
+        }, (err) => {
+             console.error("Total count listener error:", err);
+              setError("Error listening for total issue count updates.");
+              setLoading(false); // Stop loading on listener error
+         });
+        listeners.push(unsubscribeTotal);
 
 
-  }, []);
+        // Listener for SOLVED posts
+        const solvedQuery = query(postsCol, where('status', '==', 'solved'));
+        const unsubscribeSolved = onSnapshot(solvedQuery, (snap) => {
+            const solvedCount = snap.size;
+            setStats(prev => {
+                 const newStats = { ...prev, solved: solvedCount };
+                 // If total is known, recalculate pending based on solved
+                 if (prev.total !== undefined) {
+                    newStats.pending = prev.total - solvedCount;
+                 }
+                  return newStats;
+             });
+            // Mark initial load complete if all counts are now available
+             if (!initialLoadComplete && stats.total !== undefined && stats.pending !== undefined) {
+                  setLoading(false);
+                  initialLoadComplete = true;
+              }
+        }, (err) => {
+             console.error("Solved count listener error:", err);
+              setError("Error listening for solved issue count updates.");
+              setLoading(false); // Stop loading on listener error
+         });
+         listeners.push(unsubscribeSolved);
+
+        // Optional: Listener for PENDING posts (can be derived, but explicit listener is okay too)
+         // const pendingQuery = query(postsCol, where('status', '==', 'pending'));
+         // const unsubscribePending = onSnapshot(pendingQuery, (snap) => {
+         //      setStats(prev => ({ ...prev, pending: snap.size }));
+         //      if (!initialLoadComplete && stats.total !== undefined && stats.solved !== undefined) {
+         //           setLoading(false);
+         //           initialLoadComplete = true;
+         //       }
+         // }, (err) => {
+         //      console.error("Pending count listener error:", err);
+         //      setError("Error listening for pending issue count updates.");
+         //      setLoading(false); // Stop loading on listener error
+         //  });
+         //  listeners.push(unsubscribePending);
+
+
+        // Cleanup function to unsubscribe all listeners
+        return () => {
+            console.log("Cleaning up dashboard listeners...");
+            listeners.forEach(unsub => unsub());
+        };
+      }
+
+     const cleanupListeners = setupListeners();
+
+
+       // Cleanup listeners on component unmount
+       return cleanupListeners;
+
+
+  }, []); // Run effect only once on mount
 
    // TODO: Fetch actual data for the chart based on time ranges or categories
    useEffect(() => {
@@ -126,7 +197,7 @@ export default function MunicipalDashboardPage() {
             {loading ? (
               <Loader2 className="h-6 w-6 animate-spin" />
             ) : (
-              <div className="text-3xl font-bold">{stats.total}</div>
+              <div className="text-3xl font-bold">{stats.total ?? 0}</div>
             )}
             <p className="text-xs text-muted-foreground">Total issues reported</p>
           </CardContent>
@@ -141,7 +212,7 @@ export default function MunicipalDashboardPage() {
              {loading ? (
                <Loader2 className="h-6 w-6 animate-spin" />
             ) : (
-              <div className="text-3xl font-bold">{stats.solved}</div>
+              <div className="text-3xl font-bold">{stats.solved ?? 0}</div>
             )}
             <p className="text-xs text-muted-foreground">
               {stats.total > 0 ? `${((stats.solved / stats.total) * 100).toFixed(1)}% resolved` : '0% resolved'}
@@ -158,7 +229,7 @@ export default function MunicipalDashboardPage() {
              {loading ? (
                <Loader2 className="h-6 w-6 animate-spin" />
             ) : (
-              <div className="text-3xl font-bold">{stats.pending}</div>
+              <div className="text-3xl font-bold">{stats.pending ?? 0}</div>
             )}
             <p className="text-xs text-muted-foreground">Issues requiring action</p>
           </CardContent>
@@ -188,8 +259,8 @@ export default function MunicipalDashboardPage() {
                         content={<ChartTooltipContent indicator="dot" />}
                     />
                     <Legend />
-                    <Bar dataKey="pending" stackId="a" fill="var(--color-pending)" radius={[4, 4, 0, 0]} />
-                     <Bar dataKey="solved" stackId="a" fill="var(--color-solved)" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="pending" stackId="a" fill="var(--color-pending)" radius={[4, 4, 0, 0]} name={chartConfig.pending.label}/>
+                     <Bar dataKey="solved" stackId="a" fill="var(--color-solved)" radius={[4, 4, 0, 0]} name={chartConfig.solved.label}/>
                     {/* Optionally show total as a separate bar or line */}
                     {/* <Bar dataKey="total" fill="var(--color-total)" radius={[4, 4, 0, 0]} /> */}
                 </BarChart>

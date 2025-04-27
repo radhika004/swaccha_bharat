@@ -127,7 +127,7 @@ export default function AuthPage() {
            try { window.recaptchaVerifier.clear(); } catch (e) { console.error("Error clearing window.recaptchaVerifier:", e);}
            window.recaptchaVerifier = undefined;
        }
-
+      
         // Remove the reCAPTCHA badge if it exists
         const badge = document.querySelector('.grecaptcha-badge');
         if (badge && badge.parentElement) {
