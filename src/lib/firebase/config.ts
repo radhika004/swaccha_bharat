@@ -11,7 +11,7 @@ const firebaseConfig: FirebaseOptions = {
   apiKey: "AIzaSyBt5f2cLYz3jVYtdT7KX0xCCUZe45pif_U", // User provided API key
   authDomain: "swachhconnect-final-pro.firebaseapp.com", // User provided auth domain
   projectId: "swachhconnect-final-pro", // User provided project ID
-  storageBucket: "swachhconnect-final-pro.appspot.com", // *** IMPORTANT: Adjusted to standard .appspot.com format. Verify in your Firebase console. User provided: swachhconnect-final-pro.firebasestorage.app ***
+  storageBucket: "swachhconnect-final-pro.appspot.com", // Adjusted to standard .appspot.com format, user provided: swachhconnect-final-pro.firebasestorage.app
   messagingSenderId: "669952184930", // User provided sender ID
   appId: "1:669952184930:web:cfa0461663bc26feec373b", // User provided app ID
   // measurementId: "G-MEASUREMENT_ID" // Optional: Add if you have Analytics enabled and need the ID
@@ -85,7 +85,7 @@ Firebase project console (https://console.firebase.google.com/project/swachhconn
     *   Go to Storage -> Get started.
     *   **Mode:** Choose **Start in test mode**. Again, **SECURE RULES BEFORE PRODUCTION.**
     *   **Location:** Select the same location as your Firestore database.
-    *   **Expected Structure:** Images will be uploaded to paths like `posts/{userId}/{timestamp}_{filename}`.
+    *   **Expected Structure:** Images will be uploaded to paths like `posts/{userId}/{timestamp}_{filename}`. The configured bucket is `swachhconnect-final-pro.appspot.com`. **Verify this name in your Firebase Storage console.**
 
 4.  **Security Rules (CRITICAL FOR PRODUCTION):**
     *   **Firestore Rules:** Go to Firestore Database -> Rules tab. Replace the test rules with more secure ones. Example:
