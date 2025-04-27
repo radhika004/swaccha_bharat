@@ -94,15 +94,18 @@ export default function CitizenHomePage() {
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       console.log(`CitizenHomePage: Received snapshot. Documents count: ${querySnapshot.size}. Has pending writes: ${querySnapshot.metadata.hasPendingWrites}`);
-      if (querySnapshot.empty) {
-          console.log("CitizenHomePage: Snapshot is empty.");
-      }
       const postsData: Post[] = [];
       let skippedCount = 0;
+
+      if (querySnapshot.empty) {
+          console.log("CitizenHomePage: Snapshot is empty. No posts found matching the query.");
+          // Even if empty, data processing is complete for this snapshot
+      }
+
       querySnapshot.forEach((doc) => {
          console.log(`CitizenHomePage: Processing doc ${doc.id}...`);
          const data = doc.data();
-         console.log(`CitizenHomePage: Data for doc ${doc.id}:`, data);
+         // console.log(`CitizenHomePage: Data for doc ${doc.id}:`, data); // Log raw data for debugging
          // --- Data Validation & Logging ---
          if (!data.imageUrl || !data.caption || !data.timestamp || !data.userId) {
              console.warn(`CitizenHomePage: Skipping post ${doc.id} due to missing required fields. Data:`, data);
@@ -120,7 +123,7 @@ export default function CitizenHomePage() {
                return;
           }
            if (data.deadline && !(data.deadline instanceof Timestamp)) {
-               console.warn(`CitizenHomePage: Skipping post ${doc.id} due to invalid deadline type. Received:`, data.deadline);
+               console.warn(`CitizenHomePage: Post ${doc.id} has invalid deadline type, treating as undefined. Received:`, data.deadline);
                data.deadline = undefined; // Treat invalid deadline as undefined
            }
 
@@ -137,17 +140,17 @@ export default function CitizenHomePage() {
               municipalReply: data.municipalReply,
               deadline: data.deadline // Add deadline here
           };
-          console.log(`CitizenHomePage: Valid post created for doc ${doc.id}:`, newPost);
+         // console.log(`CitizenHomePage: Valid post created for doc ${doc.id}:`, newPost); // Log processed post
           postsData.push(newPost);
       });
 
       if (skippedCount > 0) {
           console.log(`CitizenHomePage: Skipped ${skippedCount} posts due to validation issues.`);
       }
-      console.log("CitizenHomePage: Final processed posts data array:", postsData);
+      console.log("CitizenHomePage: Final processed posts data array count:", postsData.length);
       setPosts(postsData);
       console.log("CitizenHomePage: State updated with posts.");
-      setLoading(false); // Set loading to false ONLY after processing is complete
+      setLoading(false); // Set loading to false AFTER processing snapshot (even if empty)
       console.log("CitizenHomePage: Loading state set to false.");
 
     }, (err) => {
@@ -166,8 +169,7 @@ export default function CitizenHomePage() {
         console.log("CitizenHomePage: Cleaning up Firestore listener.");
         unsubscribe();
     }
-    // No dependency array: This effect should run only once on mount to set up the listener.
-  }, []);
+  }, []); // Keep dependency array empty to run only once on mount
 
   const PostCardSkeleton = () => (
     <Card className="w-full max-w-lg mx-auto mb-6 overflow-hidden shadow-md rounded-lg border border-border">
@@ -226,12 +228,13 @@ export default function CitizenHomePage() {
     );
   }
 
-   console.log(`CitizenHomePage: Rendering feed. Posts count: ${posts.length}`);
+   console.log(`CitizenHomePage: Rendering feed. Posts count: ${posts.length}, Loading: ${loading}`);
   return (
     <div className="container mx-auto px-0 sm:px-4 py-6"> {/* Removed horizontal padding on small screens */}
        <h1 className="text-3xl font-bold text-center mb-8 text-primary sr-only">Issue Feed</h1> {/* Made title screen-reader only */}
       <div className="space-y-6">
-        {!loading && posts.length === 0 ? ( // Ensure loading is false before showing "No issues"
+        {/* Check for posts *after* loading is confirmed false */}
+        {!loading && posts.length === 0 ? (
            <Card className="w-full max-w-lg mx-auto text-center p-6 shadow-md rounded-lg border border-border mt-10">
              <CardContent>
                 <p className="text-muted-foreground">No issues reported yet.</p>
@@ -378,3 +381,4 @@ export default function CitizenHomePage() {
     </div>
   );
 }
+
