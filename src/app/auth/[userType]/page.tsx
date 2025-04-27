@@ -39,11 +39,11 @@ export default function AuthPage() {
   const { toast } = useToast();
 
   // Initialize reCAPTCHA
-  useEffect(() => {
+   useEffect(() => {
     let verifier: RecaptchaVerifier | null = null; // Local variable for cleanup
 
     const initializeRecaptcha = () => {
-        if (!recaptchaContainerRef.current) {
+        if (!recaptchaContainerRef.current) { // container not ready
             console.log("reCAPTCHA container ref not available yet.");
             return;
         }
@@ -56,7 +56,7 @@ export default function AuthPage() {
         try {
           console.log("Initializing RecaptchaVerifier...");
           verifier = new RecaptchaVerifier(auth, recaptchaContainerRef.current, {
-            size: 'invisible', // Use invisible reCAPTCHA
+            size: 'invisible', // Use invisible reCAPTCHA,
             callback: (response: any) => {
               console.log('reCAPTCHA verified successfully via callback.');
             },
@@ -92,16 +92,26 @@ export default function AuthPage() {
 
         } catch (err: any) {
             console.error("Error creating RecaptchaVerifier instance:", err);
-            setError(`Failed to initialize security check: ${err.message}. Check Firebase setup and authorized domains.`);
+            // Handle specific error where auth instance might not be ready
+            if (err.message?.includes('auth instance')) {
+                 setError(`Security check initialization error. Please wait a moment and try again. (Details: ${err.message})`);
+                 // Optionally attempt re-initialization after a short delay
+                 setTimeout(() => {
+                     console.log("Retrying reCAPTCHA initialization after error...");
+                     initializeRecaptcha();
+                 }, 1000);
+            } else {
+                setError(`Failed to initialize security check: ${err.message}. Check Firebase setup and authorized domains.`);
+            }
             toast({ title: "Setup Error", description: "Failed to initialize security features. Check console.", variant: "destructive" });
             window.recaptchaVerifier = undefined; // Ensure it's undefined on error
         }
     };
 
-    initializeRecaptcha(); // Initial attempt
+     initializeRecaptcha(); // Initial attempt
 
     // Cleanup function
-    return () => {
+     return () => {
       console.log("Cleaning up RecaptchaVerifier on component unmount...");
       // Use the local 'verifier' variable captured in the closure for cleanup
       if (verifier && typeof verifier.clear === 'function') {
@@ -113,7 +123,7 @@ export default function AuthPage() {
         }
       }
       // Also try cleaning window object just in case
-       if (window.recaptchaVerifier && typeof window.recaptchaVerifier.clear === 'function') {
+        if (window.recaptchaVerifier && typeof window.recaptchaVerifier.clear === 'function') {
            try { window.recaptchaVerifier.clear(); } catch (e) { console.error("Error clearing window.recaptchaVerifier:", e);}
            window.recaptchaVerifier = undefined;
        }
@@ -130,6 +140,7 @@ export default function AuthPage() {
         }
     };
   }, [auth]); // Depend only on auth instance
+
 
 
   const handlePhoneNumberChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -305,7 +316,7 @@ export default function AuthPage() {
               {/* reCAPTCHA container - crucial for invisible reCAPTCHA initialization */}
               <div ref={recaptchaContainerRef} id="recaptcha-container" style={{ marginTop: '1rem', minHeight: '1px' }}></div> {/* Ensure container has some height */}
               <Button type="submit" className="w-full bg-accent hover:bg-accent/90 text-accent-foreground" disabled={isLoading}>
-                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Send OTP'}
+                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Send OTP (Complete reCAPTCHA)'}
               </Button>
             </form>
           ) : (
@@ -339,3 +350,5 @@ export default function AuthPage() {
     </div>
   );
 }
+
+    
