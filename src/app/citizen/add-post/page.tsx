@@ -131,7 +131,8 @@ export default function AddPostPage() {
             console.log("Camera stream stopped.");
         }
     };
-  }, []); // Empty dependency array ensures this runs only once on mount
+    // Re-run if stream changes (needed for cleanup logic)
+  }, [stream]);
 
   const handleImageChange = (e: ChangeEvent<HTMLInputElement>) => {
     setShowCameraPreview(false); // Hide camera preview if a file is selected
@@ -199,7 +200,11 @@ export default function AddPostPage() {
              setStream(newStream);
              if(videoRef.current) videoRef.current.srcObject = newStream;
          })
-         .catch(err => console.error("Error reactivating camera:", err));
+         .catch(err => {
+             console.error("Error reactivating camera:", err);
+             setError("Failed to reactivate camera.");
+             toast({title: "Camera Error", description: "Could not reactivate camera.", variant: "destructive"});
+         });
      }
   };
 
@@ -357,7 +362,7 @@ export default function AddPostPage() {
         variant: 'destructive',
       });
       console.error('User not logged in during post attempt.');
-      router.push('/auth/citizen');
+      router.push('/auth/citizen'); // Redirect to login if not authenticated
       return;
     }
     console.log('User authenticated:', auth.currentUser.uid);
@@ -389,7 +394,7 @@ export default function AddPostPage() {
     console.log('Caption present:', caption);
 
     console.log('Starting post submission process...');
-    setIsLoading(true);
+    setIsLoading(true); // Start loading state
 
     try {
       console.log('Uploading image to Storage...');
@@ -414,15 +419,14 @@ export default function AddPostPage() {
         status: 'pending', // Default status
       };
 
-      if (location) {
-        // Ensure location has valid numbers before creating GeoPoint
-        if (typeof location.latitude === 'number' && typeof location.longitude === 'number') {
-           postData.location = new GeoPoint(location.latitude, location.longitude);
-           console.log('Location GeoPoint added:', postData.location);
-        } else {
-            console.warn("Invalid location data, skipping GeoPoint:", location);
-        }
+      // Ensure location is valid before adding
+      if (location && typeof location.latitude === 'number' && typeof location.longitude === 'number') {
+         postData.location = new GeoPoint(location.latitude, location.longitude);
+         console.log('Location GeoPoint added:', postData.location);
+      } else {
+          console.warn("Invalid or missing location data, skipping GeoPoint:", location);
       }
+
       if (address) {
         postData.address = address;
         console.log('Address string added:', postData.address);
@@ -445,10 +449,11 @@ export default function AddPostPage() {
       toast({ title: 'Success!', description: 'Your issue has been reported.' });
 
       console.log('Navigating to /citizen/home...');
-       router.push('/citizen/home'); // Navigate after successful submission
+      router.push('/citizen/home'); // Navigate AFTER successful submission
 
     } catch (err: any) {
       console.error('Error submitting post:', err);
+      console.error('Full error object:', err); // Log the full error
       if (err.code) {
         console.error(`Firebase Error Code: ${err.code}`);
         console.error(`Firebase Error Message: ${err.message}`);
@@ -463,7 +468,8 @@ export default function AddPostPage() {
       });
       setIsLoading(false); // Stop loading ONLY on error
     }
-    // Do NOT set isLoading to false here on success, navigation handles transition
+    // Removed finally block to ensure isLoading=false is only set on error.
+    // On success, navigation handles the transition away from the loading state.
   };
 
   return (
@@ -655,7 +661,7 @@ export default function AddPostPage() {
             type="submit"
             form="add-post-form"
             className="w-full bg-primary hover:bg-primary/90"
-            disabled={isLoading || !imageFile || !caption.trim()} // Disable if no image OR no caption
+            disabled={isLoading || !imageFile || !caption.trim()} // Disable if loading, no image OR no caption
           >
             {isLoading ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />

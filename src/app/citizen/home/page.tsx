@@ -4,16 +4,16 @@
 import React, { useState, useEffect } from 'react';
 import { collection, query, orderBy, onSnapshot, Timestamp, GeoPoint } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
-import { Card, CardContent, CardHeader, CardFooter } from '@/components/ui/card'; // Removed CardTitle
+import { Card, CardContent, CardHeader, CardFooter } from '@/components/ui/card';
 import Image from 'next/image';
-import { MapPin, User, Clock, CalendarDays, Heart, MessageCircle, Send, CheckCircle2, AlertTriangle } from 'lucide-react'; // Added Instagram-like icons, CheckCircle2, AlertTriangle
+import { MapPin, User, Clock, CalendarDays, Heart, MessageCircle, Send, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { formatDistanceToNow } from 'date-fns';
-import { cn } from '@/lib/utils'; // Import cn utility
+import { cn } from '@/lib/utils';
 
 interface Post {
   id: string;
@@ -141,10 +141,11 @@ export default function CitizenHomePage() {
       setLoading(false); // Set loading to false after successful processing
       console.log("State updated with posts. Loading set to false.");
     }, (err) => {
+      // Enhanced error logging
       console.error("Error fetching posts from Firestore: ", err);
       console.error("Firestore error code:", err.code);
       console.error("Firestore error message:", err.message);
-      console.error("Firestore error stack:", err.stack);
+      console.error("Firestore error stack:", err.stack); // Log stack trace for more context
       setError(`Failed to load posts. Please check your connection and permissions, or try again later. (Code: ${err.code})`);
       setLoading(false); // Ensure loading is set to false even on error
       console.error("Error occurred in onSnapshot listener. Loading set to false.");
@@ -155,7 +156,9 @@ export default function CitizenHomePage() {
         console.log("Cleaning up Firestore listener.");
         unsubscribe();
     }
-  }, []); // Empty dependency array means this effect runs only once on mount
+    // Removed dependency array: This effect should run only once on mount to set up the listener.
+    // Re-running on state changes (like 'posts') could lead to infinite loops or unexpected behavior.
+  }, []);
 
   const PostCardSkeleton = () => (
     <Card className="w-full max-w-lg mx-auto mb-6 overflow-hidden shadow-md rounded-lg border border-border">
@@ -258,7 +261,7 @@ export default function CitizenHomePage() {
                           ) : <p className="text-xs text-muted-foreground italic">Location not provided</p>}
                       </div>
                    </div>
-                   {/* Status Icon (optional, can be moved below) */}
+                   {/* Status Icon */}
                    <div>
                       {post.status === 'solved' ? (
                           <CheckCircle2 className="h-5 w-5 text-green-600" title="Solved" />
@@ -313,9 +316,23 @@ export default function CitizenHomePage() {
                     <span className="ml-1 whitespace-pre-wrap">{post.caption || '(No caption provided)'}</span>
                   </p>
 
-                  {/* Location Details (Removed from header, shown here if needed) */}
-                  {/* {post.address && ( ... ) } */}
-                  {/* {post.location && !post.address && ( ... ) } */}
+                  {/* Location and Address (Combined) */}
+                   {post.address ? (
+                        <div className="flex items-center text-xs text-muted-foreground pt-1">
+                           <MapPin className="h-3.5 w-3.5 mr-1 flex-shrink-0" />
+                           <span className="truncate" title={post.address}>
+                               {post.address}
+                               {post.location && <a href={`https://www.google.com/maps?q=${post.location.latitude},${post.location.longitude}`} target="_blank" rel="noopener noreferrer" className="ml-1 text-accent hover:underline" aria-label="View location on Google Maps">(Map)</a>}
+                            </span>
+                        </div>
+                    ) : post.location ? (
+                        <div className="flex items-center text-xs text-muted-foreground pt-1">
+                           <MapPin className="h-3.5 w-3.5 mr-1 flex-shrink-0" />
+                           <span>Lat: {post.location.latitude.toFixed(3)}, Lon: {post.location.longitude.toFixed(3)}</span>
+                            <a href={`https://www.google.com/maps?q=${post.location.latitude},${post.location.longitude}`} target="_blank" rel="noopener noreferrer" className="ml-1 text-accent hover:underline" aria-label="View location on Google Maps">(Map)</a>
+                        </div>
+                    ) : null}
+
 
                     {/* Deadline */}
                     {formattedDeadline && (
