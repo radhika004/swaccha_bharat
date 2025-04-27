@@ -57,8 +57,6 @@ async function getAddressFromCoordinates(
 ): Promise<string> {
   try {
     // Using OpenStreetMap Nominatim API (Free, requires attribution)
-    // Replace with a paid service (like Google Geocoding API) for production/high volume
-    // Requires enabling Billing on Google Cloud project if using Google's API
     const response = await fetch(
       `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`
     );
@@ -91,7 +89,6 @@ export default function AddPostPage() {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       console.log('Image selected:', file.name, file.size, file.type);
-      // Basic validation (type, size)
       if (!file.type.startsWith('image/')) {
         setError('Please select a valid image file.');
         toast({
@@ -101,8 +98,7 @@ export default function AddPostPage() {
         });
         return;
       }
-      // ~5MB limit
-      if (file.size > 5 * 1024 * 1024) {
+      if (file.size > 5 * 1024 * 1024) { // ~5MB limit
         setError('Image size should not exceed 5MB.');
         toast({
           title: 'File Too Large',
@@ -113,14 +109,13 @@ export default function AddPostPage() {
       }
 
       setImageFile(file);
-      // Generate preview
       const reader = new FileReader();
       reader.onloadend = () => {
         setImagePreview(reader.result as string);
         console.log('Image preview generated.');
       };
       reader.readAsDataURL(file);
-      setError(null); // Clear previous errors
+      setError(null);
     }
   };
 
@@ -150,7 +145,6 @@ export default function AddPostPage() {
         const { latitude, longitude } = position.coords;
         console.log(`Location obtained: Lat ${latitude}, Lon ${longitude}`);
         setLocation({ latitude, longitude });
-        // Fetch address
         console.log('Fetching address for coordinates...');
         const fetchedAddress = await getAddressFromCoordinates(
           latitude,
@@ -190,9 +184,8 @@ export default function AddPostPage() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     console.log('Submit button clicked.');
-    setError(null); // Clear previous errors at the start
+    setError(null);
 
-    // --- Explicit Checks ---
     console.log('Checking authentication status...');
     if (!auth.currentUser) {
       setError('You must be logged in to post.');
@@ -202,7 +195,7 @@ export default function AddPostPage() {
         variant: 'destructive',
       });
       console.error('User not logged in during post attempt.');
-      router.push('/auth/citizen'); // Redirect if not logged in
+      router.push('/auth/citizen');
       return;
     }
     console.log('User authenticated:', auth.currentUser.uid);
@@ -232,13 +225,11 @@ export default function AddPostPage() {
       return;
     }
     console.log('Caption present:', caption);
-    // --- End Explicit Checks ---
 
     console.log('Starting post submission process...');
-    setIsLoading(true); // Start loading indicator
+    setIsLoading(true);
 
     try {
-      // 1. Upload Image to Firebase Storage
       console.log('Uploading image to Storage...');
       const storagePath = `posts/${auth.currentUser.uid}/${Date.now()}_${
         imageFile.name
@@ -248,43 +239,33 @@ export default function AddPostPage() {
       const imageUrl = await getDownloadURL(imageRef);
       console.log('Image uploaded successfully. URL:', imageUrl);
 
-      // 2. Prepare Post Data for Firestore
       console.log('Preparing post data for Firestore...');
       const postData: any = {
         userId: auth.currentUser.uid,
         userName:
           auth.currentUser.displayName ||
           auth.currentUser.phoneNumber ||
-          'Anonymous User', // Add username/phone if available
+          'Anonymous User',
         imageUrl: imageUrl,
-        caption: caption.trim(), // Ensure caption is trimmed
+        caption: caption.trim(),
         timestamp: serverTimestamp(),
-        status: 'pending', // Initial status
+        status: 'pending',
       };
 
       if (location) {
         postData.location = new GeoPoint(location.latitude, location.longitude);
         console.log('Location GeoPoint added:', postData.location);
-      } else {
-        console.log('No location data provided.');
       }
       if (address) {
         postData.address = address;
         console.log('Address string added:', postData.address);
-      } else {
-        console.log('No address data provided.');
       }
-
-      // Add deadline if selected
       if (deadline) {
         postData.deadline = Timestamp.fromDate(deadline);
         console.log('Deadline Timestamp added:', postData.deadline);
-      } else {
-        console.log('No deadline provided.');
       }
 
       console.log('Final post data object being sent to Firestore:', postData);
-      // 3. Add Post Data to Firestore
       const docRef = await addDoc(collection(db, 'posts'), postData);
       console.log(
         'Post submitted successfully to Firestore! Document ID:',
@@ -294,13 +275,11 @@ export default function AddPostPage() {
 
       toast({ title: 'Success!', description: 'Your issue has been reported.' });
 
-      // 4. Navigate to the feed section AFTER successful submission
       console.log('Navigating to /citizen/home...');
       router.push('/citizen/home');
 
     } catch (err: any) {
       console.error('Error submitting post:', err);
-      // Log specific Firebase errors if possible
       if (err.code) {
         console.error(`Firebase Error Code: ${err.code}`);
         console.error(`Firebase Error Message: ${err.message}`);
@@ -313,16 +292,9 @@ export default function AddPostPage() {
         description: `Error: ${err.message}`,
         variant: 'destructive',
       });
-      setIsLoading(false); // Stop loading on error
-    } finally {
-      console.log('Post submission process finished.');
-      // Ensure isLoading is set to false regardless of success or failure,
-      // unless navigation happens on success (which implicitly stops showing the form)
-      // If navigation fails for some reason, setting it here prevents infinite loading state.
-      // However, if navigation IS successful, the component unmounts, so this might not run.
-      // It's safer to set it false on error. Navigation handles the success case.
-      // setIsLoading(false); // Removed from here, handled on error and implicitly on success navigation
+      setIsLoading(false); // Stop loading ONLY on error
     }
+    // Do not set isLoading to false here on success, navigation handles it.
   };
 
   return (
@@ -344,7 +316,6 @@ export default function AddPostPage() {
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-          {/* Add an ID to the form so the footer button can reference it */}
           <form id="add-post-form" onSubmit={handleSubmit} className="space-y-6">
             {/* Image Upload */}
             <div>
@@ -356,10 +327,10 @@ export default function AddPostPage() {
                 type="file"
                 ref={fileInputRef}
                 onChange={handleImageChange}
-                accept="image/*" // Accept only image files
-                capture="environment" // Prefer back camera on mobile
-                className="hidden" // Hide the default input
-                required // Mark as required
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                required
               />
               <Button
                 type="button"
@@ -381,7 +352,7 @@ export default function AddPostPage() {
                     alt="Selected preview"
                     fill
                     style={{ objectFit: 'cover' }}
-                    priority // Prioritize loading the preview image
+                    priority
                   />
                 </div>
               )}
@@ -397,9 +368,9 @@ export default function AddPostPage() {
                 placeholder="Describe the issue (e.g., Overflowing bin near park entrance)"
                 value={caption}
                 onChange={(e) => setCaption(e.target.value)}
-                required // Mark as required
+                required
                 className="mt-1 min-h-[100px]"
-                maxLength={500} // Optional: set max length
+                maxLength={500}
               />
               <p className="text-xs text-muted-foreground mt-1 text-right">
                 {caption.length}/500
@@ -475,16 +446,14 @@ export default function AddPostPage() {
                 </PopoverContent>
               </Popover>
             </div>
-
-            {/* Submit Button moved to CardFooter */}
           </form>
         </CardContent>
         <CardFooter>
           <Button
-            type="submit" // Connects to the form outside CardContent
-            form="add-post-form" // Reference the form's ID
+            type="submit"
+            form="add-post-form"
             className="w-full bg-primary hover:bg-primary/90"
-            disabled={isLoading || !imageFile || !caption.trim()} // Disable if loading or missing required fields
+            disabled={isLoading || !imageFile || !caption.trim()}
           >
             {isLoading ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -495,7 +464,6 @@ export default function AddPostPage() {
         </CardFooter>
       </Card>
 
-      {/* Display OpenStreetMap attribution if using Nominatim */}
       <p className="text-center text-xs text-muted-foreground mt-4">
         Address lookup powered by{' '}
         <a
@@ -512,3 +480,5 @@ export default function AddPostPage() {
   );
 }
 
+
+    

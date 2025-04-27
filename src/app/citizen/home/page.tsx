@@ -4,15 +4,16 @@
 import React, { useState, useEffect } from 'react';
 import { collection, query, orderBy, onSnapshot, Timestamp, GeoPoint } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardFooter } from '@/components/ui/card'; // Removed CardTitle
 import Image from 'next/image';
-import { MapPin, MessageSquare, User, Clock, CalendarDays } from 'lucide-react'; // Added Clock, CalendarDays icons
+import { MapPin, User, Clock, CalendarDays, Heart, MessageCircle, Send, CheckCircle2, AlertTriangle } from 'lucide-react'; // Added Instagram-like icons, CheckCircle2, AlertTriangle
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'; // Added Avatar
-import { Button } from '@/components/ui/button'; // Added Button import
-import { formatDistanceToNow } from 'date-fns'; // Import formatDistanceToNow
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
+import { formatDistanceToNow } from 'date-fns';
+import { cn } from '@/lib/utils'; // Import cn utility
 
 interface Post {
   id: string;
@@ -97,29 +98,24 @@ export default function CitizenHomePage() {
       querySnapshot.forEach((doc) => {
          const data = doc.data();
          // --- Data Validation & Logging ---
-         // console.log(`Processing post ${doc.id}:`, data); // Log raw data if needed for deep debugging
          if (!data.imageUrl || !data.caption || !data.timestamp || !data.userId) {
              console.warn(`Skipping post ${doc.id} due to missing required fields. Data:`, data);
              skippedCount++;
              return; // Skip this post if essential data is missing
          }
-          // Basic type check for timestamp
           if (!(data.timestamp instanceof Timestamp)) {
               console.warn(`Skipping post ${doc.id} due to invalid timestamp type. Received:`, data.timestamp);
               skippedCount++;
               return;
           }
-          // Basic type check for location if it exists
           if (data.location && !(data.location instanceof GeoPoint)) {
                console.warn(`Skipping post ${doc.id} due to invalid location type. Received:`, data.location);
                skippedCount++;
-               return; // Optionally skip, or handle differently
+               return;
           }
-           // Basic type check for deadline if it exists
           if (data.deadline && !(data.deadline instanceof Timestamp)) {
               console.warn(`Skipping post ${doc.id} due to invalid deadline type. Received:`, data.deadline);
-              // Don't necessarily skip, just ignore the invalid deadline
-              data.deadline = undefined; // Or set to null
+              data.deadline = undefined;
           }
 
 
@@ -146,7 +142,6 @@ export default function CitizenHomePage() {
       console.log("State updated with posts. Loading set to false.");
     }, (err) => {
       console.error("Error fetching posts from Firestore: ", err);
-      // Log the specific error details
       console.error("Firestore error code:", err.code);
       console.error("Firestore error message:", err.message);
       console.error("Firestore error stack:", err.stack);
@@ -164,24 +159,24 @@ export default function CitizenHomePage() {
 
   const PostCardSkeleton = () => (
     <Card className="w-full max-w-lg mx-auto mb-6 overflow-hidden shadow-md rounded-lg border border-border">
-      <CardHeader className="p-4 flex flex-row items-center space-x-3">
-         <Skeleton className="h-10 w-10 rounded-full bg-muted" />
-         <div className="space-y-2">
+      <CardHeader className="p-3 flex flex-row items-center space-x-3">
+         <Skeleton className="h-9 w-9 rounded-full bg-muted" />
+         <div className="space-y-1.5">
             <Skeleton className="h-4 w-[150px] bg-muted" />
             <Skeleton className="h-3 w-[100px] bg-muted" />
          </div>
       </CardHeader>
-      <Skeleton className="w-full h-[300px] md:h-[400px] bg-muted" />
-      <CardContent className="p-4 space-y-2">
+      <Skeleton className="w-full h-[400px] md:h-[500px] bg-muted" />
+      <CardContent className="p-3 space-y-2">
+          <div className="flex space-x-3">
+            <Skeleton className="h-6 w-6 rounded-full bg-muted" />
+            <Skeleton className="h-6 w-6 rounded-full bg-muted" />
+            <Skeleton className="h-6 w-6 rounded-full bg-muted" />
+          </div>
         <Skeleton className="h-4 w-full bg-muted" />
         <Skeleton className="h-4 w-[80%] bg-muted" />
-        <Skeleton className="h-4 w-[60%] mt-2 bg-muted" /> {/* Location Skeleton */}
-        <Skeleton className="h-4 w-[50%] mt-2 bg-muted" /> {/* Deadline Skeleton */}
+        <Skeleton className="h-3 w-[60%] mt-1 bg-muted" />
       </CardContent>
-      <CardFooter className="p-4 flex justify-between items-center text-sm text-muted-foreground">
-        <Skeleton className="h-4 w-[120px] bg-muted" />
-         <Skeleton className="h-4 w-[80px] bg-muted" />
-      </CardFooter>
     </Card>
   );
 
@@ -218,11 +213,11 @@ export default function CitizenHomePage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-6">
-       <h1 className="text-3xl font-bold text-center mb-8 text-primary">Issue Feed</h1>
+    <div className="container mx-auto px-0 sm:px-4 py-6"> {/* Removed horizontal padding on small screens */}
+       <h1 className="text-3xl font-bold text-center mb-8 text-primary sr-only">Issue Feed</h1> {/* Made title screen-reader only */}
       <div className="space-y-6">
         {posts.length === 0 ? (
-           <Card className="w-full max-w-lg mx-auto text-center p-6 shadow-md rounded-lg border border-border">
+           <Card className="w-full max-w-lg mx-auto text-center p-6 shadow-md rounded-lg border border-border mt-10">
              <CardContent>
                 <p className="text-muted-foreground">No issues reported yet.</p>
                 <Button asChild variant="link" className="mt-2">
@@ -233,115 +228,129 @@ export default function CitizenHomePage() {
         ) : (
           posts.map((post, index) => {
             const formattedDeadline = formatDeadline(post.deadline);
+            const relativeDate = formatRelativeDate(post.timestamp);
+            const fullDate = formatFullDate(post.timestamp);
+
             return (
-              <Card key={post.id || index} className="w-full max-w-lg mx-auto overflow-hidden shadow-md rounded-lg border border-border transition-shadow duration-300 hover:shadow-lg">
-                <CardHeader className="p-4 flex items-center justify-between bg-card">
-                   {/* User Info */}
+              // Use rounded-none on small screens for edge-to-edge feel
+              <Card key={post.id || index} className="w-full max-w-lg mx-auto overflow-hidden shadow-none sm:shadow-md rounded-none sm:rounded-lg border-b sm:border border-border transition-shadow duration-300 hover:shadow-lg">
+                {/* Post Header */}
+                <CardHeader className="p-3 flex items-center justify-between bg-card border-b sm:border-none">
                    <div className="flex items-center space-x-3">
-                      <Avatar className="h-10 w-10 border border-border">
-                          {/* Add AvatarImage if you store profile pics */}
-                          <AvatarFallback className="bg-secondary"><User className="h-5 w-5 text-muted-foreground"/></AvatarFallback>
+                      <Avatar className="h-9 w-9 border border-border">
+                          <AvatarFallback className="bg-secondary text-xs"><User className="h-4 w-4 text-muted-foreground"/></AvatarFallback>
                       </Avatar>
                       <div>
                           <p className="text-sm font-medium text-foreground">{post.userName || 'Anonymous User'}</p>
-                          <p className="text-xs text-muted-foreground" title={formatFullDate(post.timestamp)}>
-                            <Clock className="inline h-3 w-3 mr-0.5 relative -top-px" />
-                            {formatRelativeDate(post.timestamp)}
-                          </p>
+                          {/* Show address or relative location in header if available */}
+                          {post.address ? (
+                              <p className="text-xs text-muted-foreground truncate max-w-[200px]" title={post.address}>
+                                  <MapPin className="inline h-3 w-3 mr-0.5 relative -top-px" />
+                                  {post.address.split(',')[0]} {/* Show first part of address */}
+                              </p>
+                          ) : post.location ? (
+                             <p className="text-xs text-muted-foreground">
+                                <MapPin className="inline h-3 w-3 mr-0.5 relative -top-px" />
+                                Near {post.location.latitude.toFixed(2)}, {post.location.longitude.toFixed(2)}
+                             </p>
+                          ) : null}
                       </div>
                    </div>
-                    {/* Status Badge */}
+                   {/* Status Icon (optional, can be moved below) */}
                    <div>
                       {post.status === 'solved' ? (
-                          <span className="text-xs font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded-full inline-block border border-green-200">
-                          Solved
-                          </span>
+                          <CheckCircle2 className="h-5 w-5 text-green-600" title="Solved" />
                       ) : (
-                          <span className="text-xs font-semibold text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full inline-block border border-orange-200">
-                          Pending
-                          </span>
+                          <AlertTriangle className="h-5 w-5 text-orange-500" title="Pending" />
                       )}
                    </div>
                 </CardHeader>
+
+                {/* Post Image */}
                 {post.imageUrl ? (
-                  <div className="relative w-full h-[300px] md:h-[400px] bg-muted">
+                  <div className="relative w-full aspect-square bg-muted"> {/* Maintain aspect ratio */}
                     <Image
                       src={post.imageUrl}
                       alt={post.caption || 'Issue Image'}
-                      fill // Use fill instead of layout="fill"
-                      style={{ objectFit: 'cover' }} // Use style prop for objectFit
-                      priority={index < 3} // Prioritize loading first few images
-                      sizes="(max-width: 640px) 100vw, (max-width: 768px) 90vw, 512px" // Provide sizes prop
+                      fill
+                      style={{ objectFit: 'cover' }}
+                      priority={index < 3}
+                      sizes="(max-width: 640px) 100vw, 512px"
                       onError={(e) => console.error(`Error loading image: ${post.imageUrl}`, e.currentTarget.srcset)}
-                      unoptimized={false} // Ensure optimization is enabled unless specifically needed otherwise
+                      unoptimized={false}
                     />
                   </div>
                 ) : (
-                   <div className="w-full h-[300px] md:h-[400px] bg-muted flex items-center justify-center text-muted-foreground">
+                   <div className="w-full aspect-square bg-muted flex items-center justify-center text-muted-foreground">
                        <span>Image not available</span>
                    </div>
                 )}
-                <CardContent className="p-4 bg-card space-y-2">
-                  <p className="text-foreground whitespace-pre-wrap">{post.caption || '(No caption provided)'}</p>
-                   {post.address ? (
-                      <div className="flex items-center text-sm text-muted-foreground">
-                      <MapPin className="h-4 w-4 mr-1.5 flex-shrink-0" />
-                      <span>{post.address}</span>
-                      {/* Optional: Link to map */}
-                       {post.location && (
-                          <a
-                          href={`https://www.google.com/maps?q=${post.location.latitude},${post.location.longitude}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="ml-2 text-accent hover:underline text-xs"
-                          aria-label="View location on Google Maps"
-                          >
-                          (View Map)
-                          </a>
-                      )}
+
+                 {/* Post Content & Actions */}
+                <CardContent className="p-3 bg-card space-y-2">
+                    {/* Action Icons */}
+                    <div className="flex items-center space-x-3 mb-2">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+                            <Heart className="h-5 w-5"/>
+                            <span className="sr-only">Like</span>
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+                             <MessageCircle className="h-5 w-5"/>
+                            <span className="sr-only">Comment</span>
+                        </Button>
+                         <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+                             <Send className="h-5 w-5"/>
+                             <span className="sr-only">Share</span>
+                        </Button>
+                    </div>
+
+                  {/* Caption */}
+                  <p className="text-sm text-foreground">
+                    <span className="font-medium">{post.userName || 'Anonymous User'}</span>
+                    <span className="ml-1 whitespace-pre-wrap">{post.caption || '(No caption provided)'}</span>
+                  </p>
+
+                  {/* Location Details (Optional - uncomment if needed here) */}
+                  {/* {post.address ? (
+                      <div className="flex items-center text-xs text-muted-foreground">
+                         <MapPin className="h-3 w-3 mr-1 flex-shrink-0" />
+                         <span>{post.address}</span>
+                         {post.location && (
+                             <a href={`https://www.google.com/maps?q=${post.location.latitude},${post.location.longitude}`} target="_blank" rel="noopener noreferrer" className="ml-1.5 text-accent hover:underline" aria-label="View location on Google Maps">(View Map)</a>
+                         )}
                       </div>
-                   ) : post.location ? (
-                        <div className="flex items-center text-sm text-muted-foreground">
-                           <MapPin className="h-4 w-4 mr-1.5 flex-shrink-0" />
-                           <span>Lat: {post.location.latitude.toFixed(4)}, Lon: {post.location.longitude.toFixed(4)}</span>
-                             <a
-                              href={`https://www.google.com/maps?q=${post.location.latitude},${post.location.longitude}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="ml-2 text-accent hover:underline text-xs"
-                              aria-label="View location on Google Maps"
-                              >
-                              (View Map)
-                              </a>
+                   ) : post.location && (
+                       <div className="flex items-center text-xs text-muted-foreground">
+                          <MapPin className="h-3 w-3 mr-1 flex-shrink-0" />
+                          <span>Lat: {post.location.latitude.toFixed(4)}, Lon: {post.location.longitude.toFixed(4)}</span>
+                          <a href={`https://www.google.com/maps?q=${post.location.latitude},${post.location.longitude}`} target="_blank" rel="noopener noreferrer" className="ml-1.5 text-accent hover:underline" aria-label="View location on Google Maps">(View Map)</a>
                        </div>
-                   ) : (
-                        <div className="flex items-center text-sm text-muted-foreground">
-                           <MapPin className="h-4 w-4 mr-1.5 text-gray-400 flex-shrink-0" />
-                           <span>Location not provided</span>
-                       </div>
-                   )}
-                    {/* Display Deadline */}
+                   )} */}
+
+                    {/* Deadline */}
                     {formattedDeadline && (
-                        <div className="flex items-center text-sm text-muted-foreground">
-                            <CalendarDays className="h-4 w-4 mr-1.5 flex-shrink-0 text-red-600" />
-                            <span className="text-red-700 font-medium">Deadline: {formattedDeadline}</span>
+                        <div className="flex items-center text-xs text-red-600 font-medium pt-1">
+                            <CalendarDays className="h-3.5 w-3.5 mr-1 flex-shrink-0" />
+                            <span>Deadline: {formattedDeadline}</span>
                         </div>
                     )}
 
-                  {post.municipalReply && (
-                    <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-md">
-                      <p className="text-sm font-semibold text-green-800 mb-1">Municipal Response:</p>
-                      <p className="text-sm text-green-700 whitespace-pre-wrap">{post.municipalReply}</p>
+                    {/* Municipal Reply */}
+                   {post.municipalReply && (
+                    <div className="mt-2 p-2 bg-secondary/50 border border-border rounded-md">
+                      <p className="text-xs font-medium text-foreground mb-0.5">Municipal Response:</p>
+                      <p className="text-xs text-muted-foreground whitespace-pre-wrap">{post.municipalReply}</p>
                     </div>
                   )}
+
+                  {/* Timestamp */}
+                  <p className="text-xs text-muted-foreground pt-1" title={fullDate}>
+                    <Clock className="inline h-3 w-3 mr-0.5 relative -top-px" />
+                    {relativeDate}
+                  </p>
+
                 </CardContent>
-                {/* Add footer for actions like comments if needed */}
-                {/* Example Footer:
-                <CardFooter className="p-4 flex justify-start items-center text-sm text-muted-foreground border-t border-border bg-card">
-                   <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
-                     <MessageSquare className="h-4 w-4 mr-1" /> Comment
-                   </Button>
-                </CardFooter> */}
+
               </Card>
             )
           })
@@ -350,3 +359,5 @@ export default function CitizenHomePage() {
     </div>
   );
 }
+
+    
