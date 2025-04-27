@@ -1,3 +1,4 @@
+
 import { initializeApp, getApps, getApp, type FirebaseOptions } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
@@ -7,13 +8,13 @@ import { getAnalytics, isSupported } from "firebase/analytics"; // Import getAna
 // Your web app's Firebase configuration from user input
 // Ensure these values are correct and correspond to your Firebase project.
 const firebaseConfig: FirebaseOptions = {
-  apiKey: "AIzaSyDnJX2xWMaordA6DZQyKbaKn4Lo2W-OGKE", // Ensure this is your actual API key
-  authDomain: "citizen-b8829.firebaseapp.com",
-  projectId: "citizen-b8829",
-  storageBucket: "citizen-b8829.appspot.com", // Corrected storage bucket name convention
-  messagingSenderId: "636473614567",
-  appId: "1:636473614567:web:443c859ccb6579c7470242",
-  measurementId: "G-6XN84R93G3" // Optional but included as provided
+  apiKey: "AIzaSyBt5f2cLYz3jVYtdT7KX0xCCUZe45pif_U", // User provided API key
+  authDomain: "swachhconnect-final-pro.firebaseapp.com", // User provided auth domain
+  projectId: "swachhconnect-final-pro", // User provided project ID
+  storageBucket: "swachhconnect-final-pro.appspot.com", // *** IMPORTANT: Adjusted to standard .appspot.com format. Verify in your Firebase console. User provided: swachhconnect-final-pro.firebasestorage.app ***
+  messagingSenderId: "669952184930", // User provided sender ID
+  appId: "1:669952184930:web:cfa0461663bc26feec373b", // User provided app ID
+  // measurementId: "G-MEASUREMENT_ID" // Optional: Add if you have Analytics enabled and need the ID
 };
 
 
@@ -59,12 +60,12 @@ Firebase Project Setup Instructions (Updated with User Config)
 ============================================
 
 Project Details Used:
-- Project ID: citizen-b8829
-- Auth Domain: citizen-b8829.firebaseapp.com
-- Storage Bucket: citizen-b8829.appspot.com (Note: Default is often .appspot.com, verify in your console)
+- Project ID: swachhconnect-final-pro
+- Auth Domain: swachhconnect-final-pro.firebaseapp.com
+- Storage Bucket: swachhconnect-final-pro.appspot.com (NOTE: Please double-check this in your Firebase console Storage section. The default format is usually project-id.appspot.com)
 
 Ensure the following services are enabled and configured in your
-Firebase project console (https://console.firebase.google.com/project/citizen-b8829/overview):
+Firebase project console (https://console.firebase.google.com/project/swachhconnect-final-pro/overview):
 
 1.  **Authentication:**
     *   Go to Authentication -> Sign-in method tab.
@@ -77,6 +78,7 @@ Firebase project console (https://console.firebase.google.com/project/citizen-b8
     *   Go to Firestore Database -> Create database.
     *   **Mode:** Choose **Start in test mode** for initial development. This allows open read/write access for 30 days. **REMEMBER TO SECURE YOUR RULES BEFORE PRODUCTION.**
     *   **Location:** Select a Firestore location geographically close to your primary user base (e.g., `us-central`, `europe-west`). This cannot be changed later.
+    *   **Cloud Firestore API:** Make sure the "Cloud Firestore API" is enabled in the Google Cloud Console for this project. Go to Google Cloud Console -> APIs & Services -> Library, search for "Cloud Firestore API" and enable it if it's disabled. Wait a few minutes after enabling.
     *   **Expected Collections:** Your app will likely create `posts` and `users` collections as data is added.
 
 3.  **Storage:**
@@ -136,7 +138,7 @@ Firebase project console (https://console.firebase.google.com/project/citizen-b8
         *   Access them in `config.ts` using `process.env.NEXT_PUBLIC_FIREBASE_API_KEY`. Ensure the `NEXT_PUBLIC_` prefix is used for client-side access in Next.js.
 
 6.  **(Optional) Google Analytics:**
-    *   If you enabled Analytics during project creation, ensure `measurementId` is correct. No extra console setup is usually needed beyond initial enablement. Data will start appearing in the Analytics section of the Firebase console. Check network requests if data isn't appearing.
+    *   If you want to use Analytics, ensure it's enabled in your Firebase project settings (Project settings > Integrations > Google Analytics). You might need to add the `measurementId` to the `firebaseConfig` object above if it wasn't automatically included.
 
 7.  **Network/Firewall Issues:**
     *   Errors like `auth/network-request-failed` often indicate problems connecting to Firebase services. Check:
