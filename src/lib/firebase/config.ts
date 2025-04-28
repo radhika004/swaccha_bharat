@@ -7,14 +7,15 @@ import { getAnalytics, isSupported } from "firebase/analytics";
 
 // Your web app's Firebase configuration from user input
 const firebaseConfig: FirebaseOptions = {
-  apiKey: "AIzaSyBt5f2cLYz3jVYtdT7KX0xCCUZe45pif_U", // Use the latest key provided by the user
-  authDomain: "swachhconnect-final-pro.firebaseapp.com", // Use the latest domain provided
-  projectId: "swachhconnect-final-pro", // Use the latest project ID provided
-  storageBucket: "swachhconnect-final-pro.firebasestorage.app", // Use the latest storage bucket provided
-  messagingSenderId: "669952184930", // Use the latest sender ID provided
-  appId: "1:669952184930:web:cfa0461663bc26feec373b", // Use the latest app ID provided
+  apiKey: "AIzaSyBt5f2cLYz3jVYtdT7KX0xCCUZe45pif_U", // Updated key
+  authDomain: "swachhconnect-final-pro.firebaseapp.com", // Updated domain
+  projectId: "swachhconnect-final-pro", // Updated project ID
+  storageBucket: "swachhconnect-final-pro.firebasestorage.app", // Updated storage bucket
+  messagingSenderId: "669952184930", // Updated sender ID
+  appId: "1:669952184930:web:cfa0461663bc26feec373b" // Updated app ID
   // measurementId: "G-MEASUREMENT_ID" // Optional: Add if needed and configured
 };
+
 
 // Initialize Firebase
 let app;
@@ -39,8 +40,13 @@ if (typeof window !== 'undefined') {
     isSupported().then((supported) => {
         if (supported) {
             try {
-                analytics = getAnalytics(app);
-                console.log("Firebase Analytics initialized.");
+                // Check if measurementId is present before initializing
+                if (firebaseConfig.measurementId) {
+                  analytics = getAnalytics(app);
+                  console.log("Firebase Analytics initialized.");
+                } else {
+                  console.log("Firebase Analytics not initialized (measurementId missing).");
+                }
             } catch (e) {
                 console.error("Error initializing Firebase Analytics:", e);
             }
@@ -51,6 +57,7 @@ if (typeof window !== 'undefined') {
         console.error("Error checking Analytics support:", e);
     });
 }
+
 
 // Export the initialized services for use in other parts of the application
 export { app, auth, db, storage, analytics };
@@ -98,6 +105,7 @@ Firebase project console (https://console.firebase.google.com/project/swachhconn
 
 6.  **(Optional) Google Analytics:**
     *   Enable in Firebase project settings if needed.
+    *   Ensure `measurementId` is included in `firebaseConfig` if Analytics is used.
 
 7.  **Network/Firewall Issues:**
     *   Check connection, firewalls, proxies, and browser extensions if encountering network errors.
@@ -105,3 +113,4 @@ Firebase project console (https://console.firebase.google.com/project/swachhconn
 
 ============================================
 */
+
