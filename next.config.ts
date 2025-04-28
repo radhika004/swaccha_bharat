@@ -1,18 +1,30 @@
 import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  reactStrictMode: true, // Enable React strict mode for better checks
   typescript: {
-    ignoreBuildErrors: true,
+    // !! WARN !!
+    // Dangerously allow production builds to successfully complete even if
+    // your project has type errors.
+    // !! WARN !!
+    ignoreBuildErrors: true, // Keep this true for faster iteration, consider false for production builds
   },
   eslint: {
-    ignoreDuringBuilds: true,
+    // Warning: This allows production builds to successfully complete even if
+    // your project has ESLint errors.
+    ignoreDuringBuilds: true, // Keep this true for faster iteration, consider false for production builds
   },
   images: {
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: 'picsum.photos',
+        hostname: 'firebasestorage.googleapis.com', // Allow images from Firebase Storage
+        port: '',
+        pathname: '/**', // Allow any path within the bucket
+      },
+      {
+        protocol: 'https',
+        hostname: 'picsum.photos', // Allow placeholder images
         port: '',
         pathname: '/**',
       },

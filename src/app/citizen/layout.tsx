@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Home, PlusSquare, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import AuthProvider from '@/components/auth-provider'; // Assuming AuthProvider handles session/auth state
+import AuthProvider from '@/components/auth-provider'; // Protect citizen routes
 
 export default function CitizenLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -17,13 +17,13 @@ export default function CitizenLayout({ children }: { children: ReactNode }) {
   ];
 
   return (
-    <AuthProvider requiredRole="citizen">
+    <AuthProvider requiredRole="citizen"> {/* Ensure only citizens can access */}
       <div className="flex flex-col min-h-screen">
-        <main className="flex-grow pb-16">{children}</main> {/* Add padding-bottom to prevent overlap */}
+        <main className="flex-grow pb-16">{children}</main> {/* Padding for bottom nav */}
 
         {/* Bottom Navigation */}
-        <nav className="fixed bottom-0 left-0 right-0 bg-background border-t border-border shadow-md z-50">
-          <div className="flex justify-around items-center h-16 max-w-screen-md mx-auto">
+        <nav className="fixed bottom-0 left-0 right-0 bg-background border-t border-border shadow-[0_-2px_10px_-5px_rgba(0,0,0,0.1)] z-50">
+          <div className="flex justify-around items-center h-16 max-w-screen-md mx-auto px-2">
             {navItems.map((item) => {
               const isActive = pathname === item.href;
               return (
@@ -31,12 +31,14 @@ export default function CitizenLayout({ children }: { children: ReactNode }) {
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    'flex flex-col items-center justify-center text-center px-2 py-1 rounded-md transition-colors duration-200 ease-in-out',
-                    isActive ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
+                    'flex flex-col items-center justify-center text-center px-2 py-1 rounded-md transition-colors duration-200 ease-in-out w-1/3', // Ensure items spread out
+                    isActive
+                      ? 'text-primary scale-105' // Highlight active item
+                      : 'text-muted-foreground hover:text-primary'
                   )}
                   aria-current={isActive ? 'page' : undefined}
                 >
-                  <item.icon className="h-6 w-6 mb-1" />
+                  <item.icon className="h-6 w-6 mb-0.5" />
                   <span className="text-xs font-medium">{item.label}</span>
                 </Link>
               );

@@ -1,18 +1,29 @@
-import type { Metadata } from 'next';
-import { Inter } from 'next/font/google'; // Using Inter font
+import type { Metadata, Viewport } from 'next';
+import { Inter as FontSans } from 'next/font/google';
 import './globals.css';
-import { Toaster } from "@/components/ui/toaster"; // Import Toaster
+import { Toaster } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
 
-const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-sans', // Define CSS variable for the font
+const fontSans = FontSans({
+  subsets: ["latin"],
+  variable: "--font-sans",
 });
 
 export const metadata: Metadata = {
-  title: 'SwachhConnect', // Updated App Name
-  description: 'Connecting citizens and municipal authorities for a cleaner, smarter India.', // Updated Tagline
+  title: "SwachhConnect",
+  description: "Connecting citizens and municipal authorities for a cleaner, smarter India.",
 };
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: 'white' },
+    { media: '(prefers-color-scheme: dark)', color: 'black' },
+  ],
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+}
 
 export default function RootLayout({
   children,
@@ -24,13 +35,11 @@ export default function RootLayout({
       <body
         className={cn(
           "min-h-screen bg-background font-sans antialiased",
-          inter.variable // Apply font variable
+          fontSans.variable
         )}
       >
-        {/* AuthProvider could wrap here if global auth state is needed,
-            or applied within specific route layouts (like /citizen or /municipal) */}
         {children}
-        <Toaster /> {/* Add Toaster here to display toasts globally */}
+        <Toaster />
       </body>
     </html>
   );

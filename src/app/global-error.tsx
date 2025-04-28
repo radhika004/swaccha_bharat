@@ -1,7 +1,8 @@
-// TODO: Add error page
 'use client'; // Error components must be Client Components
 
 import { useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { AlertTriangle } from 'lucide-react';
 
 export default function GlobalError({
   error,
@@ -12,76 +13,52 @@ export default function GlobalError({
 }) {
   useEffect(() => {
     // Log the error to an error reporting service
-    console.error(error);
+    console.error("Global Error Boundary Caught:", error);
   }, [error]);
 
   return (
     <html>
       <body>
         <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            minHeight: '100vh',
-            fontFamily: 'sans-serif',
-            padding: '2rem',
-            textAlign: 'center',
-            backgroundColor: '#fef2f2', // Light red background
-            color: '#b91c1c', // Dark red text
-          }}
+          className="flex flex-col items-center justify-center min-h-screen bg-destructive/10 p-6 text-center"
         >
-          <h2 style={{ marginBottom: '1rem', fontSize: '1.5rem', fontWeight: '600' }}>
-            Something went wrong!
+           <AlertTriangle className="h-16 w-16 text-destructive mb-6" />
+          <h2 className="text-3xl font-bold text-destructive mb-4">
+            Something Went Wrong!
           </h2>
-          <p style={{ marginBottom: '1.5rem', color: '#dc2626' }}>
-             An unexpected error occurred. We apologize for the inconvenience.
+          <p className="text-lg text-destructive/80 mb-8 max-w-lg">
+             An unexpected error occurred. We apologize for the inconvenience. Please try again or return to the homepage.
           </p>
            {/* Optional: Display error details during development */}
            {process.env.NODE_ENV === 'development' && (
              <pre
-               style={{
-                 maxWidth: '80%',
-                 overflowX: 'auto',
-                 padding: '1rem',
-                 border: '1px solid #fecaca',
-                 borderRadius: '0.375rem',
-                 backgroundColor: '#fee2e2',
-                 color: '#991b1b',
-                 textAlign: 'left',
-                 fontSize: '0.875rem',
-                 marginBottom: '1.5rem',
-               }}
+               className="max-w-full overflow-x-auto p-4 border border-destructive/30 rounded-md bg-destructive/5 text-destructive text-left text-xs mb-6"
              >
                {error?.message}
                {error?.digest && `\nDigest: ${error.digest}`}
-               {error?.stack && `\nStack: ${error.stack}`}
+               {/* Consider limiting stack trace output */}
+               {/* {error?.stack && `\nStack: ${error.stack}`} */}
              </pre>
            )}
-          <button
-            onClick={
-              // Attempt to recover by trying to re-render the segment
-              () => reset()
-            }
-            style={{
-              padding: '0.75rem 1.5rem',
-              border: 'none',
-              borderRadius: '0.375rem',
-              backgroundColor: '#dc2626', // Red background
-              color: 'white',
-              fontSize: '1rem',
-              cursor: 'pointer',
-              transition: 'background-color 0.2s',
-            }}
-            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#b91c1c')}
-            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#dc2626')}
-          >
-            Try again
-          </button>
-           <p style={{ marginTop: '2rem', fontSize: '0.875rem', color: '#ef4444' }}>
-             If the problem persists, please contact support or return to the <a href="/" style={{ color: '#b91c1c', textDecoration: 'underline' }}>homepage</a>.
-           </p>
+          <div className="flex gap-4">
+            <Button
+              onClick={
+                // Attempt to recover by trying to re-render the segment
+                () => reset()
+              }
+              variant="destructive"
+              size="lg"
+            >
+              Try Again
+            </Button>
+             <Button
+                asChild
+                variant="outline"
+                size="lg"
+              >
+                 <a href="/">Go to Homepage</a>
+             </Button>
+           </div>
         </div>
       </body>
     </html>

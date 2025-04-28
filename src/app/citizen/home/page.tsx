@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -6,7 +5,7 @@ import { collection, query, orderBy, onSnapshot, Timestamp, GeoPoint } from 'fir
 import { db } from '@/lib/firebase/config';
 import { Card, CardContent, CardHeader, CardFooter } from '@/components/ui/card';
 import Image from 'next/image';
-import { MapPin, User, Clock, CalendarDays, Heart, MessageCircle, Send, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { MapPin, User, Clock, CalendarDays, Heart, MessageCircle, Send, CheckCircle2, AlertTriangle, CircleEllipsis } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -19,64 +18,41 @@ interface Post {
   id: string;
   imageUrl: string;
   caption: string;
-  location?: GeoPoint; // Use Firestore GeoPoint type
-  address?: string; // Add address field
+  location?: GeoPoint;
+  address?: string;
   timestamp: Timestamp;
   userId: string;
-  userName?: string; // Add username field
+  userName?: string;
   status?: 'pending' | 'solved';
   municipalReply?: string;
-  deadline?: Timestamp; // Add deadline field
+  deadline?: Timestamp;
+  solvedTimestamp?: Timestamp;
 }
 
-// Helper function to format Firestore Timestamp (full date)
+// Helper to format Firestore Timestamp (e.g., "Aug 15, 2024, 10:30 AM")
 const formatFullDate = (timestamp: Timestamp): string => {
-  if (!timestamp || typeof timestamp.toDate !== 'function') {
-      console.warn("Invalid timestamp received:", timestamp);
-      return 'Invalid date'; // Handle potential errors if timestamp is not valid or missing
-  }
+  if (!timestamp?.toDate) return 'Invalid date';
   try {
     return timestamp.toDate().toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
+      year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
     });
-  } catch (e) {
-    console.error("Error formatting timestamp:", e, timestamp);
-    return 'Error date';
-  }
+  } catch (e) { console.error("Error formatting full date:", e, timestamp); return "Error date"; }
 };
 
-// Helper function to format date relative to now (e.g., "2 days ago")
+// Helper to format date relative to now (e.g., "2 days ago")
 const formatRelativeDate = (timestamp: Timestamp): string => {
-    if (!timestamp || typeof timestamp.toDate !== 'function') {
-        return 'a while ago';
-    }
-    try {
-        return formatDistanceToNow(timestamp.toDate(), { addSuffix: true });
-    } catch (e) {
-        console.error("Error formatting relative date:", e, timestamp);
-        return 'Error date';
-    }
+  if (!timestamp?.toDate) return 'a while ago';
+  try {
+    return formatDistanceToNow(timestamp.toDate(), { addSuffix: true });
+  } catch (e) { console.error("Error formatting relative date:", e, timestamp); return 'Error date'; }
 };
 
-// Helper function to format deadline date
+// Helper to format deadline date (e.g., "Aug 20, 2024")
 const formatDeadline = (timestamp?: Timestamp): string | null => {
-    if (!timestamp || typeof timestamp.toDate !== 'function') {
-        return null;
-    }
-    try {
-        return timestamp.toDate().toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-        });
-    } catch (e) {
-        console.error("Error formatting deadline:", e, timestamp);
-        return 'Error date';
-    }
+  if (!timestamp?.toDate) return null;
+  try {
+    return timestamp.toDate().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  } catch (e) { console.error("Error formatting deadline:", e, timestamp); return 'Error date'; }
 };
 
 export default function CitizenHomePage() {
@@ -85,161 +61,137 @@ export default function CitizenHomePage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    console.log("CitizenHomePage: useEffect triggered. Setting up Firestore listener...");
-    setLoading(true); // Ensure loading is true at the start
-    setError(null); // Clear previous errors
+    console.log("Setting up Firestore listener for posts...");
+    setLoading(true);
+    setError(null);
 
     const q = query(collection(db, 'posts'), orderBy('timestamp', 'desc'));
-    console.log("CitizenHomePage: Firestore query created:", q);
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      console.log(`CitizenHomePage: Received snapshot. Documents count: ${querySnapshot.size}. Has pending writes: ${querySnapshot.metadata.hasPendingWrites}`);
+      console.log(`Snapshot received. Documents: ${querySnapshot.size}. Pending writes: ${querySnapshot.metadata.hasPendingWrites}`);
       const postsData: Post[] = [];
       let skippedCount = 0;
 
-      if (querySnapshot.empty) {
-          console.log("CitizenHomePage: Snapshot is empty. No posts found matching the query.");
-          // Even if empty, data processing is complete for this snapshot
-      }
-
       querySnapshot.forEach((doc) => {
-         console.log(`CitizenHomePage: Processing doc ${doc.id}...`);
-         const data = doc.data();
-         // console.log(`CitizenHomePage: Data for doc ${doc.id}:`, data); // Log raw data for debugging
-         // --- Data Validation & Logging ---
-         if (!data.imageUrl || !data.caption || !data.timestamp || !data.userId) {
-             console.warn(`CitizenHomePage: Skipping post ${doc.id} due to missing required fields. Data:`, data);
-             skippedCount++;
-             return; // Skip this post if essential data is missing
+        const data = doc.data();
+        // --- Data Validation ---
+        if (!data.imageUrl || !data.caption || !data.timestamp || !data.userId) {
+          console.warn(`Skipping post ${doc.id} due to missing required fields. Data:`, data);
+          skippedCount++;
+          return;
+        }
+        if (!(data.timestamp instanceof Timestamp)) {
+          console.warn(`Skipping post ${doc.id} due to invalid timestamp type. Received:`, data.timestamp);
+          skippedCount++;
+          return;
+        }
+        if (data.location && !(data.location instanceof GeoPoint)) {
+           console.warn(`Skipping post ${doc.id} due to invalid location type. Received:`, data.location);
+           skippedCount++;
+           return; // Skip if location exists but is wrong type
+        }
+         if (data.deadline && !(data.deadline instanceof Timestamp)) {
+            console.warn(`Post ${doc.id} has invalid deadline type, ignoring deadline. Received:`, data.deadline);
+            data.deadline = undefined;
          }
-          if (!(data.timestamp instanceof Timestamp)) {
-              console.warn(`CitizenHomePage: Skipping post ${doc.id} due to invalid timestamp type. Received:`, data.timestamp);
-              skippedCount++;
-              return;
-          }
-          if (data.location && !(data.location instanceof GeoPoint)) {
-               console.warn(`CitizenHomePage: Skipping post ${doc.id} due to invalid location type. Received:`, data.location);
-               skippedCount++;
-               return;
-          }
-           if (data.deadline && !(data.deadline instanceof Timestamp)) {
-               console.warn(`CitizenHomePage: Post ${doc.id} has invalid deadline type, treating as undefined. Received:`, data.deadline);
-               data.deadline = undefined; // Treat invalid deadline as undefined
-           }
+         if (data.solvedTimestamp && !(data.solvedTimestamp instanceof Timestamp)) {
+            console.warn(`Post ${doc.id} has invalid solvedTimestamp type, ignoring solved time. Received:`, data.solvedTimestamp);
+            data.solvedTimestamp = undefined;
+        }
 
-          const newPost: Post = {
-              id: doc.id,
-              imageUrl: data.imageUrl,
-              caption: data.caption,
-              location: data.location, // Keep as GeoPoint
-              address: data.address,
-              timestamp: data.timestamp,
-              userId: data.userId,
-              userName: data.userName || 'Anonymous User', // Provide fallback
-              status: data.status || 'pending', // Provide fallback status
-              municipalReply: data.municipalReply,
-              deadline: data.deadline // Add deadline here
-          };
-         // console.log(`CitizenHomePage: Valid post created for doc ${doc.id}:`, newPost); // Log processed post
-          postsData.push(newPost);
+        postsData.push({
+          id: doc.id,
+          imageUrl: data.imageUrl,
+          caption: data.caption,
+          location: data.location,
+          address: data.address,
+          timestamp: data.timestamp,
+          userId: data.userId,
+          userName: data.userName || 'Anonymous User',
+          status: data.status === 'solved' ? 'solved' : 'pending', // Ensure valid status
+          municipalReply: data.municipalReply,
+          deadline: data.deadline,
+          solvedTimestamp: data.solvedTimestamp,
+        });
       });
 
       if (skippedCount > 0) {
-          console.log(`CitizenHomePage: Skipped ${skippedCount} posts due to validation issues.`);
+        console.log(`Skipped ${skippedCount} posts due to validation issues.`);
       }
-      console.log("CitizenHomePage: Final processed posts data array count:", postsData.length);
+      console.log("Processed posts count:", postsData.length);
       setPosts(postsData);
-      console.log("CitizenHomePage: State updated with posts.");
-      setLoading(false); // Set loading to false AFTER processing snapshot (even if empty)
-      console.log("CitizenHomePage: Loading state set to false.");
+      setLoading(false);
+      console.log("Loading state set to false.");
 
     }, (err) => {
-      // Enhanced error logging
-      console.error("CitizenHomePage: Error fetching posts from Firestore: ", err);
-      console.error("CitizenHomePage: Firestore error code:", err.code);
-      console.error("CitizenHomePage: Firestore error message:", err.message);
-      console.error("CitizenHomePage: Firestore error stack:", err.stack); // Log stack trace for more context
-      setError(`Failed to load posts. Please check your connection and permissions, or try again later. (Code: ${err.code})`);
-      setLoading(false); // Ensure loading is set to false even on error
-      console.error("CitizenHomePage: Error occurred in onSnapshot listener. Loading set to false.");
+      console.error("Error fetching posts from Firestore: ", err);
+      setError(`Failed to load posts. Check connection/permissions. (Code: ${err.code})`);
+      setLoading(false);
     });
 
     // Cleanup subscription on unmount
     return () => {
-        console.log("CitizenHomePage: Cleaning up Firestore listener.");
-        unsubscribe();
+      console.log("Cleaning up Firestore listener.");
+      unsubscribe();
     }
-  }, []); // Keep dependency array empty to run only once on mount
+  }, []); // Empty dependency array ensures this runs only once on mount
 
   const PostCardSkeleton = () => (
-    <Card className="w-full max-w-lg mx-auto mb-6 overflow-hidden shadow-md rounded-lg border border-border">
-      <CardHeader className="p-3 flex flex-row items-center space-x-3">
-         <Skeleton className="h-9 w-9 rounded-full bg-muted" />
-         <div className="space-y-1.5">
-            <Skeleton className="h-4 w-[150px] bg-muted" />
-            <Skeleton className="h-3 w-[100px] bg-muted" />
+    <Card className="w-full max-w-xl mx-auto mb-6 overflow-hidden shadow-md rounded-lg border border-border animate-pulse">
+      <CardHeader className="p-3 flex items-center space-x-3">
+         <Skeleton className="h-10 w-10 rounded-full bg-muted" />
+         <div className="space-y-2">
+            <Skeleton className="h-4 w-[180px] bg-muted" />
+            <Skeleton className="h-3 w-[120px] bg-muted" />
          </div>
       </CardHeader>
-      <Skeleton className="w-full h-[400px] md:h-[500px] bg-muted" />
-      <CardContent className="p-3 space-y-2">
+      <Skeleton className="w-full aspect-square bg-muted" /> {/* Image Placeholder */}
+      <CardContent className="p-3 space-y-3">
           <div className="flex space-x-3">
-            <Skeleton className="h-6 w-6 rounded-full bg-muted" />
-            <Skeleton className="h-6 w-6 rounded-full bg-muted" />
-            <Skeleton className="h-6 w-6 rounded-full bg-muted" />
+            <Skeleton className="h-7 w-7 rounded-full bg-muted" />
+            <Skeleton className="h-7 w-7 rounded-full bg-muted" />
+            <Skeleton className="h-7 w-7 rounded-full bg-muted" />
           </div>
         <Skeleton className="h-4 w-full bg-muted" />
-        <Skeleton className="h-4 w-[80%] bg-muted" />
-        <Skeleton className="h-3 w-[60%] mt-1 bg-muted" />
+        <Skeleton className="h-4 w-[85%] bg-muted" />
+        <Skeleton className="h-3 w-[50%] mt-1 bg-muted" />
       </CardContent>
     </Card>
   );
 
-
-  if (loading) {
-       console.log("CitizenHomePage: Rendering loading state.");
-       return (
-           <div className="container mx-auto px-4 py-6">
-               <h1 className="text-3xl font-bold text-center mb-8 text-primary">Issue Feed</h1>
-               <div className="space-y-6">
-                  <PostCardSkeleton />
-                  <PostCardSkeleton />
-                  <PostCardSkeleton />
-               </div>
-           </div>
-       );
-  }
-
-
   if (error) {
-     console.log("CitizenHomePage: Rendering error state:", error);
     return (
-        <div className="container mx-auto px-4 py-6">
-             <Alert variant="destructive" className="max-w-lg mx-auto">
-              <AlertTitle>Error Loading Feed</AlertTitle>
-              <AlertDescription>
-                  {error}
-                  <br />
-                  <Button onClick={() => window.location.reload()} variant="link" className="p-0 h-auto mt-2 text-destructive-foreground">
-                      Try Refreshing
-                  </Button>
-              </AlertDescription>
-            </Alert>
-        </div>
+      <div className="container mx-auto px-4 py-10 flex justify-center">
+        <Alert variant="destructive" className="max-w-lg">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Error Loading Feed</AlertTitle>
+          <AlertDescription>
+            {error}
+            <Button onClick={() => window.location.reload()} variant="link" className="p-0 h-auto mt-2 text-destructive-foreground underline">
+              Try Refreshing
+            </Button>
+          </AlertDescription>
+        </Alert>
+      </div>
     );
   }
 
-   console.log(`CitizenHomePage: Rendering feed. Posts count: ${posts.length}, Loading: ${loading}`);
   return (
-    <div className="container mx-auto px-0 sm:px-4 py-6"> {/* Removed horizontal padding on small screens */}
-       <h1 className="text-3xl font-bold text-center mb-8 text-primary sr-only">Issue Feed</h1> {/* Made title screen-reader only */}
+    <div className="container mx-auto px-0 sm:px-4 py-6">
+      <h1 className="text-3xl font-bold text-center mb-8 text-primary sr-only">Issue Feed</h1>
       <div className="space-y-6">
-        {/* Check for posts *after* loading is confirmed false */}
-        {!loading && posts.length === 0 ? (
-           <Card className="w-full max-w-lg mx-auto text-center p-6 shadow-md rounded-lg border border-border mt-10">
-             <CardContent>
-                <p className="text-muted-foreground">No issues reported yet.</p>
-                <Button asChild variant="link" className="mt-2">
-                    <Link href="/citizen/add-post">Be the first to report an issue!</Link>
+        {loading ? (
+          <>
+            <PostCardSkeleton />
+            <PostCardSkeleton />
+          </>
+        ) : posts.length === 0 ? (
+           <Card className="w-full max-w-lg mx-auto text-center p-8 shadow-md rounded-lg border border-border mt-10 bg-card">
+             <CardContent className="flex flex-col items-center gap-4">
+                <CircleEllipsis className="w-12 h-12 text-muted-foreground" />
+                <p className="text-lg text-muted-foreground">No issues reported yet.</p>
+                <Button asChild variant="default" className="mt-2 bg-primary hover:bg-primary/90">
+                    <Link href="/citizen/add-post">Be the first to report one!</Link>
                 </Button>
              </CardContent>
            </Card>
@@ -250,129 +202,111 @@ export default function CitizenHomePage() {
             const fullDate = formatFullDate(post.timestamp);
 
             return (
-              // Use rounded-none on small screens for edge-to-edge feel
-              <Card key={post.id || index} className="w-full max-w-lg mx-auto overflow-hidden shadow-none sm:shadow-md rounded-none sm:rounded-lg border-b sm:border border-border transition-shadow duration-300 hover:shadow-lg">
+              <Card key={post.id} className="w-full max-w-xl mx-auto overflow-hidden shadow-md rounded-lg border border-border transition-shadow duration-300 hover:shadow-xl bg-card">
                 {/* Post Header */}
-                <CardHeader className="p-3 flex items-center justify-between bg-card border-b sm:border-none">
-                   <div className="flex items-center space-x-3">
-                      <Avatar className="h-9 w-9 border border-border">
-                          {/* Add AvatarImage if user profile pics are stored */}
-                          <AvatarFallback className="bg-secondary text-xs"><User className="h-4 w-4 text-muted-foreground"/></AvatarFallback>
-                      </Avatar>
-                      <div>
-                          <p className="text-sm font-medium text-foreground">{post.userName || 'Anonymous User'}</p>
-                          {/* Show address or relative location in header if available */}
-                          {post.address ? (
-                              <p className="text-xs text-muted-foreground truncate max-w-[200px] hover:max-w-none hover:whitespace-normal" title={post.address}>
-                                  <MapPin className="inline h-3 w-3 mr-0.5 relative -top-px" />
-                                  {post.address.split(',')[0]} {/* Show first part of address */}
-                              </p>
-                          ) : post.location ? (
-                             <p className="text-xs text-muted-foreground">
-                                <MapPin className="inline h-3 w-3 mr-0.5 relative -top-px" />
-                                Near {post.location.latitude.toFixed(2)}, {post.location.longitude.toFixed(2)}
-                                 <a href={`https://www.google.com/maps?q=${post.location.latitude},${post.location.longitude}`} target="_blank" rel="noopener noreferrer" className="ml-1 text-accent hover:underline" aria-label="View location on Google Maps">(Map)</a>
-                             </p>
-                          ) : <p className="text-xs text-muted-foreground italic">Location not provided</p>}
-                      </div>
-                   </div>
+                <CardHeader className="p-3 flex items-center justify-between border-b">
+                  <div className="flex items-center space-x-3">
+                    <Avatar className="h-9 w-9 border">
+                      <AvatarFallback className="bg-secondary text-xs"><User className="h-4 w-4 text-muted-foreground"/></AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">{post.userName || 'Anonymous User'}</p>
+                      {/* Location Info */}
+                      <p className="text-xs text-muted-foreground truncate max-w-[200px] hover:max-w-none hover:whitespace-normal" title={post.address || (post.location ? `Near ${post.location.latitude.toFixed(2)}, ${post.location.longitude.toFixed(2)}` : 'Location not provided')}>
+                         <MapPin className="inline h-3 w-3 mr-0.5 relative -top-px" />
+                          {post.address ? post.address.split(',')[0] : post.location ? `Near lat/lon` : 'No location'}
+                          {post.location && (
+                             <a href={`https://www.google.com/maps?q=${post.location.latitude},${post.location.longitude}`} target="_blank" rel="noopener noreferrer" className="ml-1 text-accent hover:underline text-xs">(Map)</a>
+                          )}
+                      </p>
+                    </div>
+                  </div>
                    {/* Status Icon */}
-                   <div>
+                   <div title={post.status === 'solved' ? `Solved ${post.solvedTimestamp ? formatRelativeDate(post.solvedTimestamp) : ''}` : 'Pending'}>
                       {post.status === 'solved' ? (
-                          <CheckCircle2 className="h-5 w-5 text-green-600" title="Solved" />
+                          <CheckCircle2 className="h-5 w-5 text-green-600" />
                       ) : (
-                          <AlertTriangle className="h-5 w-5 text-orange-500" title="Pending" />
+                          <AlertTriangle className="h-5 w-5 text-orange-500" />
                       )}
                    </div>
                 </CardHeader>
 
                 {/* Post Image */}
-                {post.imageUrl ? (
-                  <div className="relative w-full aspect-square bg-muted"> {/* Maintain aspect ratio */}
+                <div className="relative w-full aspect-square bg-muted overflow-hidden">
+                  {post.imageUrl ? (
                     <Image
                       src={post.imageUrl}
                       alt={post.caption || 'Issue Image'}
                       fill
-                      style={{ objectFit: 'cover' }} // Use cover for better fill
-                      priority={index < 3} // Prioritize loading first few images
-                      sizes="(max-width: 640px) 100vw, 512px" // Responsive image sizes
-                      onError={(e) => console.error(`CitizenHomePage: Error loading image: ${post.imageUrl}`, e.currentTarget.srcset)}
-                      // Consider adding placeholder="blur" and blurDataURL if generating previews
+                      style={{ objectFit: 'cover' }}
+                      priority={index < 2} // Prioritize first 2 images
+                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 672px" // Optimized sizes
+                      onError={(e) => { (e.target as HTMLImageElement).src = 'https://picsum.photos/600/600?grayscale'; (e.target as HTMLImageElement).alt="Image load error"; }} // Fallback image
                     />
-                  </div>
-                ) : (
-                   <div className="w-full aspect-square bg-muted flex items-center justify-center text-muted-foreground">
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-muted-foreground bg-gray-200">
                        <span>Image not available</span>
-                   </div>
-                )}
-
-                 {/* Post Content & Actions */}
-                <CardContent className="p-3 bg-card space-y-2">
-                    {/* Action Icons */}
-                    <div className="flex items-center space-x-3 mb-2">
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-accent/10 rounded-full">
-                            <Heart className="h-5 w-5"/>
-                            <span className="sr-only">Like</span>
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-accent/10 rounded-full">
-                             <MessageCircle className="h-5 w-5"/>
-                            <span className="sr-only">Comment</span>
-                        </Button>
-                         <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-accent/10 rounded-full">
-                             <Send className="h-5 w-5"/>
-                             <span className="sr-only">Share</span>
-                        </Button>
-                         {/* Maybe a bookmark icon on the right */}
                     </div>
+                  )}
+                </div>
+
+                {/* Post Content & Actions */}
+                <CardContent className="p-3 space-y-2">
+                  {/* Action Icons */}
+                  <div className="flex items-center space-x-1 -ml-2">
+                    <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-red-500 hover:bg-red-100/50 rounded-full">
+                      <Heart className="h-5 w-5" />
+                      <span className="sr-only">Like</span>
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-full">
+                      <MessageCircle className="h-5 w-5" />
+                      <span className="sr-only">Comment</span>
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-full">
+                      <Send className="h-5 w-5" />
+                      <span className="sr-only">Share</span>
+                    </Button>
+                  </div>
 
                   {/* Caption */}
                   <p className="text-sm text-foreground">
-                    <span className="font-medium">{post.userName || 'Anonymous User'}</span>
-                    <span className="ml-1 whitespace-pre-wrap">{post.caption || '(No caption provided)'}</span>
+                    <span className="font-semibold mr-1">{post.userName || 'User'}</span>
+                    <span className="whitespace-pre-wrap break-words">{post.caption || '(No caption provided)'}</span>
                   </p>
 
-                  {/* Location and Address (Combined) */}
-                   {post.address ? (
-                        <div className="flex items-center text-xs text-muted-foreground pt-1">
-                           <MapPin className="h-3.5 w-3.5 mr-1 flex-shrink-0" />
-                           <span className="truncate" title={post.address}>
-                               {post.address}
-                               {post.location && <a href={`https://www.google.com/maps?q=${post.location.latitude},${post.location.longitude}`} target="_blank" rel="noopener noreferrer" className="ml-1 text-accent hover:underline" aria-label="View location on Google Maps">(Map)</a>}
-                            </span>
-                        </div>
-                    ) : post.location ? (
-                        <div className="flex items-center text-xs text-muted-foreground pt-1">
-                           <MapPin className="h-3.5 w-3.5 mr-1 flex-shrink-0" />
-                           <span>Lat: {post.location.latitude.toFixed(3)}, Lon: {post.location.longitude.toFixed(3)}</span>
-                            <a href={`https://www.google.com/maps?q=${post.location.latitude},${post.location.longitude}`} target="_blank" rel="noopener noreferrer" className="ml-1 text-accent hover:underline" aria-label="View location on Google Maps">(Map)</a>
-                        </div>
-                    ) : null}
+                  {/* Full Address (if available and different from header) */}
+                  {post.address && (
+                    <p className="text-xs text-muted-foreground pt-1 flex items-start gap-1" title={post.address}>
+                      <MapPin className="h-3.5 w-3.5 flex-shrink-0 mt-px" />
+                      <span>{post.address}</span>
+                    </p>
+                  )}
 
+                  {/* Deadline */}
+                  {formattedDeadline && (
+                    <p className={cn("text-xs font-medium pt-1 flex items-center gap-1", new Date() > (post.deadline?.toDate() ?? new Date()) ? "text-red-600" : "text-muted-foreground")}>
+                      <CalendarDays className="h-3.5 w-3.5 flex-shrink-0" />
+                      <span>Deadline: {formattedDeadline} {new Date() > (post.deadline?.toDate() ?? new Date()) && '(Overdue)'}</span>
+                    </p>
+                  )}
 
-                    {/* Deadline */}
-                    {formattedDeadline && (
-                        <div className="flex items-center text-xs text-red-600 font-medium pt-1">
-                            <CalendarDays className="h-3.5 w-3.5 mr-1 flex-shrink-0" />
-                            <span>Deadline: {formattedDeadline}</span>
-                        </div>
-                    )}
-
-                    {/* Municipal Reply */}
-                   {post.municipalReply && (
-                    <div className="mt-2 p-2 bg-secondary/50 border border-border rounded-md">
-                      <p className="text-xs font-medium text-foreground mb-0.5">Municipal Response:</p>
-                      <p className="text-xs text-muted-foreground whitespace-pre-wrap">{post.municipalReply}</p>
+                  {/* Municipal Reply */}
+                  {post.municipalReply && (
+                    <div className="mt-2 p-2.5 bg-secondary/60 border border-border rounded-md text-xs">
+                      <p className="font-semibold text-foreground mb-1">Municipal Response:</p>
+                      <p className="text-muted-foreground whitespace-pre-wrap break-words">{post.municipalReply}</p>
+                       {post.solvedTimestamp && (
+                          <p className="text-gray-500 mt-1 text-[11px]">Responded: {formatRelativeDate(post.solvedTimestamp)}</p>
+                        )}
                     </div>
                   )}
 
                   {/* Timestamp */}
                   <p className="text-xs text-muted-foreground pt-1" title={fullDate}>
-                    <Clock className="inline h-3 w-3 mr-0.5 relative -top-px" />
-                    {relativeDate}
+                    <Clock className="inline h-3 w-3 mr-1 relative -top-px" />
+                    Posted {relativeDate}
                   </p>
-
                 </CardContent>
-
               </Card>
             )
           })
@@ -381,4 +315,3 @@ export default function CitizenHomePage() {
     </div>
   );
 }
-

@@ -2,19 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  font-family: Arial, Helvetica, sans-serif;
-}
-
 @layer base {
   :root {
     /* SwachhConnect Theme */
-    /* Primary: Green (#4CAF50) */
-    /* Secondary: White (#FFFFFF) */
-    /* Accent: Teal (#008080) */
+    /* Primary: Green (#4CAF50) HSL: 122 39% 49% */
+    /* Secondary: White (#FFFFFF) HSL: 0 0% 100% */
+    /* Accent: Teal (#008080) HSL: 180 100% 25% */
 
     --background: 0 0% 100%; /* White */
-    --foreground: 0 0% 3.9%; /* Dark Gray/Black for text */
+    --foreground: 0 0% 3.9%; /* Default dark text */
 
     --card: 0 0% 100%; /* White */
     --card-foreground: 0 0% 3.9%;
@@ -34,29 +30,30 @@ body {
     --accent: 180 100% 25%; /* Teal (#008080) */
     --accent-foreground: 0 0% 100%; /* White text on Teal */
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
+    --destructive: 0 84.2% 60.2%; /* Default Red */
+    --destructive-foreground: 0 0% 98%; /* Light text on Red */
 
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
+    --border: 0 0% 89.8%; /* Light Gray Border */
+    --input: 0 0% 89.8%; /* Light Gray Input Background */
     --ring: 180 100% 25%; /* Teal for focus rings */
 
+    /* Chart Colors (adjust as needed) */
     --chart-1: 122 39% 49%; /* Green */
     --chart-2: 180 100% 25%; /* Teal */
     --chart-3: 210 40% 96.1%; /* Lighter Blue/Gray */
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
+    --chart-4: 43 74% 66%; /* Yellowish */
+    --chart-5: 27 87% 67%; /* Orangeish */
 
-    --radius: 0.5rem;
+    --radius: 0.5rem; /* Default border radius */
 
-    /* Sidebar (Using main theme for simplicity, adjust if needed) */
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 0 0% 9%;
+    /* Sidebar Theme (can customize further if needed) */
+    --sidebar-background: 0 0% 98%; /* Very Light Gray */
+    --sidebar-foreground: 0 0% 9%; /* Dark Text */
     --sidebar-primary: 122 39% 49%; /* Green */
     --sidebar-primary-foreground: 0 0% 100%; /* White */
     --sidebar-accent: 180 100% 25%; /* Teal */
     --sidebar-accent-foreground: 0 0% 100%; /* White */
-    --sidebar-border: 0 0% 89.8%;
+    --sidebar-border: 0 0% 89.8%; /* Light Gray Border */
     --sidebar-ring: 180 100% 25%; /* Teal */
   }
 
@@ -71,7 +68,7 @@ body {
     --popover: 240 10% 3.9%;
     --popover-foreground: 0 0% 98%;
 
-    --primary: 122 39% 55%; /* Slightly lighter Green */
+    --primary: 122 39% 55%; /* Slightly lighter Green for dark mode */
     --primary-foreground: 0 0% 9%;
 
     --secondary: 240 3.7% 15.9%;
@@ -80,7 +77,7 @@ body {
     --muted: 240 3.7% 15.9%;
     --muted-foreground: 240 5% 64.9%;
 
-    --accent: 180 100% 30%; /* Slightly lighter Teal */
+    --accent: 180 100% 30%; /* Slightly lighter Teal for dark mode */
     --accent-foreground: 0 0% 98%;
 
     --destructive: 0 62.8% 30.6%;
@@ -96,7 +93,7 @@ body {
     --chart-4: 43 74% 70%;
     --chart-5: 27 87% 71%;
 
-    /* Dark Sidebar (adjust if needed) */
+     /* Dark Sidebar (adjust if needed) */
     --sidebar-background: 240 10% 3.9%;
     --sidebar-foreground: 0 0% 98%;
     --sidebar-primary: 122 39% 55%;
@@ -114,5 +111,6 @@ body {
   }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
