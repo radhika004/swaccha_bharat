@@ -8,7 +8,7 @@ import {
   signInWithPhoneNumber,
   type ConfirmationResult,
 } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore'; // Import Firestore functions
+import { doc, setDoc } from 'firebase/firestore'; // Import Firestore functions
 import { auth, db } from '@/lib/firebase/config';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -69,9 +69,14 @@ export default function AuthPage() {
         console.log("reCAPTCHA container ref not available yet.");
         return;
       }
-      if (window.recaptchaVerifier) {
+      if (window.recaptchaVerifier && typeof window.recaptchaVerifier.clear === 'function') {
         console.log("reCAPTCHA verifier already exists, clearing old one.");
-        window.recaptchaVerifier.clear();
+         try {
+            window.recaptchaVerifier.clear();
+            console.log("Cleared previous window.recaptchaVerifier instance.");
+         } catch (clearError) {
+            console.error("Error clearing previous window.recaptchaVerifier:", clearError);
+         }
         window.recaptchaVerifier = undefined;
       }
 
@@ -87,9 +92,13 @@ export default function AuthPage() {
             console.warn('reCAPTCHA verification expired. User needs to retry.');
             setError('reCAPTCHA verification expired. Please try sending OTP again.');
             setIsLoading(false);
-            if (verifier) {
-              verifier.clear();
-              console.log("Cleared expired reCAPTCHA. Ready for retry.");
+            if (verifier && typeof verifier.clear === 'function') {
+               try {
+                  verifier.clear();
+                  console.log("Cleared expired reCAPTCHA. Ready for retry.");
+               } catch (clearError) {
+                  console.error("Error clearing expired reCAPTCHA:", clearError);
+               }
             }
           },
         });
@@ -104,7 +113,13 @@ export default function AuthPage() {
           console.error("Error rendering reCAPTCHA:", err);
           setError(`Failed to render reCAPTCHA: ${err.message}. Please refresh and try again.`);
           toast({ title: "reCAPTCHA Error", description: "Could not initialize verification. Please refresh.", variant: "destructive" });
-          if (verifier) verifier.clear();
+           if (verifier && typeof verifier.clear === 'function') {
+                try {
+                    verifier.clear();
+                } catch (clearError) {
+                    console.error("Error clearing verifier after render error:", clearError);
+                }
+           }
           window.recaptchaVerifier = undefined;
         });
 
@@ -128,19 +143,29 @@ export default function AuthPage() {
       if (verifier && typeof verifier.clear === 'function') {
         try {
           verifier.clear();
-          console.log("RecaptchaVerifier instance cleared.");
+          console.log("Local RecaptchaVerifier instance cleared.");
         } catch (clearError) {
-          console.error("Error during RecaptchaVerifier cleanup:", clearError);
+          console.error("Error during local RecaptchaVerifier cleanup:", clearError);
         }
       }
       if (window.recaptchaVerifier && typeof window.recaptchaVerifier.clear === 'function') {
-        try { window.recaptchaVerifier.clear(); } catch (e) { console.error("Error clearing window.recaptchaVerifier:", e); }
+        try {
+            window.recaptchaVerifier.clear();
+            console.log("Window RecaptchaVerifier instance cleared.");
+         } catch (e) {
+             console.error("Error clearing window.recaptchaVerifier:", e);
+         }
         window.recaptchaVerifier = undefined;
       }
       const badge = document.querySelector('.grecaptcha-badge');
       if (badge?.parentElement) {
-         try { badge.parentElement.remove(); console.log("Removed reCAPTCHA badge from DOM."); }
-         catch (removeError) { console.error("Error removing reCAPTCHA badge:", removeError); }
+         try {
+             badge.parentElement.remove();
+             console.log("Removed reCAPTCHA badge from DOM.");
+         }
+         catch (removeError) {
+             console.error("Error removing reCAPTCHA badge:", removeError);
+         }
       }
     };
   }, [auth]); // Re-run only if auth instance changes
@@ -167,7 +192,8 @@ export default function AuthPage() {
       return;
     }
 
-    if (!window.recaptchaVerifier) {
+    const activeVerifier = window.recaptchaVerifier;
+    if (!activeVerifier) {
       setError('Security check not ready. Please wait or refresh.');
       toast({ title: "Verification Error", description: "Security check failed to initialize. Try refreshing.", variant: "destructive" });
       setIsLoading(false);
@@ -182,7 +208,7 @@ export default function AuthPage() {
       }
       console.log(`Sending OTP to: ${formattedPhoneNumber}`);
 
-      const confirmationResult = await signInWithPhoneNumber(auth, formattedPhoneNumber, window.recaptchaVerifier);
+      const confirmationResult = await signInWithPhoneNumber(auth, formattedPhoneNumber, activeVerifier);
       window.confirmationResult = confirmationResult;
       setIsOtpSent(true);
       toast({ title: "OTP Sent", description: "Check your phone for the verification code." });
@@ -196,10 +222,12 @@ export default function AuthPage() {
         userMessage = 'Too many requests. Please wait before trying again.';
       } else if (err.code === 'auth/network-request-failed') {
         userMessage = 'Network error. Check connection and firewall.';
-      } else if (err.code === 'auth/captcha-check-failed') {
+      } else if (err.code === 'auth/captcha-check-failed' || err.code === 'auth/internal-error') {
         userMessage = 'reCAPTCHA verification failed. Please try again.';
         // Reset reCAPTCHA if needed
-        window.recaptchaVerifier?.render().catch(renderErr => console.error("Failed to re-render reCAPTCHA:", renderErr));
+         if (activeVerifier && typeof activeVerifier.render === 'function') {
+             activeVerifier.render().catch(renderErr => console.error("Failed to re-render reCAPTCHA:", renderErr));
+         }
       } else if (err.code === 'auth/missing-client-identifier') {
          userMessage = 'Firebase setup issue: Missing client identifier. Ensure Phone Auth is enabled correctly.';
       }
@@ -254,6 +282,8 @@ export default function AuthPage() {
       } else if (err.code === 'auth/session-expired') {
          userMessage = 'Verification session expired. Please request a new OTP.';
          setIsOtpSent(false); setOtp('');
+      } else if (err.code === 'auth/internal-error') {
+          userMessage = 'An internal Firebase error occurred during verification. Please try again.';
       }
       setError(`${userMessage} (Code: ${err.code})`);
       toast({ title: "Verification Failed", description: userMessage, variant: "destructive" });
