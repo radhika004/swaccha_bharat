@@ -1,43 +1,115 @@
 'use client';
 
 import React, { useState } from 'react';
-import { collection, query, where, getDocs, orderBy, Timestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+// Removed Firebase imports (collection, query, where, getDocs, orderBy, Timestamp, db)
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Calendar as CalendarIcon, Download, Loader2, AlertCircle, FileText, Search } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, parseISO, isWithinInterval } from 'date-fns'; // Added parseISO, isWithinInterval
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
+import { Skeleton } from '@/components/ui/skeleton';
 
-interface ReportData {
+// Reusing MockPost interface from issues page, ensure consistency
+interface MockPost {
   id: string;
+  imageUrl?: string; // Optional for report
   caption: string;
   address?: string;
   status: 'pending' | 'solved';
-  timestamp: Timestamp;
-  deadline?: Timestamp;
+  timestamp: string; // ISO String
+  deadline?: string; // ISO String
   municipalReply?: string;
-  userName?: string; // Added userName
-  userId: string; // Added userId
+  userName?: string;
+  userId: string;
 }
+
+// Use the same sample data as issues page for consistency
+const allMockPosts: MockPost[] = [
+ {
+    id: 'mock1',
+    imageUrl: 'https://picsum.photos/600/600?random=1',
+    caption: 'Overflowing bin near the park entrance. Needs immediate attention.',
+    address: 'Near Central Park Entrance, Mock City',
+    timestamp: new Date(Date.now() - 86400000 * 1).toISOString(), // 1 day ago
+    userId: 'mock_citizen_1',
+    userName: 'Concerned Citizen A',
+    status: 'pending',
+    deadline: new Date(Date.now() + 86400000 * 2).toISOString(),
+  },
+   {
+    id: 'mock3',
+    imageUrl: 'https://picsum.photos/600/600?random=3',
+    caption: 'Street light not working on Elm Street.',
+    address: '456 Elm Street, Mock City',
+    timestamp: new Date(Date.now() - 86400000 * 5).toISOString(), // 5 days ago
+    userId: 'mock_citizen_3',
+    userName: 'Resident C',
+    status: 'pending',
+  },
+   {
+    id: 'mock_local_1',
+    imageUrl: 'https://picsum.photos/600/600?random=4',
+    caption: 'Pothole on Oak Avenue',
+    address: 'Oak Avenue, Mock City',
+    timestamp: new Date(Date.now() - 86400000 * 2).toISOString(), // 2 days ago
+    userId: 'mock_citizen_user',
+    userName: 'Citizen User (Mock)',
+    status: 'pending',
+    deadline: new Date(Date.now() + 86400000 * 7).toISOString(),
+  },
+  {
+    id: 'mock2',
+    imageUrl: 'https://picsum.photos/600/600?random=2',
+    caption: 'Drainage blocked on Main Street. Water logging during rains.',
+    address: '123 Main Street, Mock City',
+    timestamp: new Date(Date.now() - 86400000 * 3).toISOString(), // 3 days ago
+    userId: 'mock_citizen_2',
+    userName: 'Resident B',
+    status: 'solved',
+    municipalReply: 'The drainage has been cleared by our team.',
+    solvedTimestamp: new Date(Date.now() - 86400000).toISOString(),
+  },
+    // Add more mock posts spanning different dates if needed
+     {
+    id: 'mock4_older',
+    imageUrl: 'https://picsum.photos/600/600?random=5',
+    caption: 'Broken pavement causing hazard.',
+    address: 'Maple Lane',
+    timestamp: new Date(Date.now() - 86400000 * 15).toISOString(), // 15 days ago
+    userId: 'mock_citizen_4',
+    userName: 'Pedestrian D',
+    status: 'solved',
+    municipalReply: 'Repaired.',
+    solvedTimestamp: new Date(Date.now() - 86400000 * 10).toISOString(), // 10 days ago
+  },
+];
 
 export default function MunicipalReportsPage() {
   const [startDate, setStartDate] = useState<Date | undefined>(undefined);
   const [endDate, setEndDate] = useState<Date | undefined>(undefined);
-  const [reportData, setReportData] = useState<ReportData[]>([]);
+  const [reportData, setReportData] = useState<MockPost[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [reportGenerated, setReportGenerated] = useState(false); // Track if report was generated
+  const [reportGenerated, setReportGenerated] = useState(false);
   const { toast } = useToast();
+
+   // Helper function to safely format dates, returning 'N/A' or empty string on error/undefined
+   const safeFormat = (dateString: string | undefined, formatString: string): string => {
+    if (!dateString) return 'N/A';
+    try {
+      return format(parseISO(dateString), formatString);
+    } catch {
+      return 'Invalid Date';
+    }
+  };
 
   const handleGenerateReport = async () => {
     setError(null);
-    setReportGenerated(false); // Reset generated state
+    setReportGenerated(false);
 
     if (!startDate || !endDate) {
       setError('Please select both start and end dates.');
@@ -52,58 +124,45 @@ export default function MunicipalReportsPage() {
 
     setLoading(true);
     setReportData([]);
+    console.log("Frontend-only: Generating mock report...");
+
+    // Simulate fetching/filtering delay
+    await new Promise(resolve => setTimeout(resolve, 600));
 
     try {
       const adjustedEndDate = new Date(endDate);
       adjustedEndDate.setHours(23, 59, 59, 999); // Include the whole end day
 
-      const startTimestamp = Timestamp.fromDate(startDate);
-      const endTimestamp = Timestamp.fromDate(adjustedEndDate);
-
-      const postsCol = collection(db, 'posts');
-      const q = query(
-        postsCol,
-        where('timestamp', '>=', startTimestamp),
-        where('timestamp', '<=', endTimestamp),
-        orderBy('timestamp', 'desc')
-      );
-
-      const querySnapshot = await getDocs(q);
-      const data: ReportData[] = [];
-      querySnapshot.forEach((doc) => {
-        const docData = doc.data();
-        if (docData.timestamp instanceof Timestamp) { // Validate timestamp
-          data.push({
-            id: doc.id,
-            caption: docData.caption || 'N/A',
-            address: docData.address,
-            status: docData.status || 'pending',
-            timestamp: docData.timestamp,
-            deadline: docData.deadline instanceof Timestamp ? docData.deadline : undefined,
-            municipalReply: docData.municipalReply,
-            userName: docData.userName || 'Citizen User', // Add userName
-            userId: docData.userId || 'N/A', // Add userId
-          });
-        } else {
-          console.warn(`Skipping doc ${doc.id} in report: invalid timestamp.`);
+      // Filter mock data based on the selected date range
+      const filteredData = allMockPosts.filter(post => {
+        try {
+           const postDate = parseISO(post.timestamp);
+           return isWithinInterval(postDate, { start: startDate, end: adjustedEndDate });
+        } catch {
+            console.warn(`Skipping post ${post.id} due to invalid timestamp during report generation.`);
+            return false;
         }
       });
 
-      setReportData(data);
-      setReportGenerated(true); // Mark report as generated
-      toast({ title: "Report Generated", description: `Found ${data.length} issues for the selected period.` });
+       // Sort the filtered data
+       filteredData.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+
+      setReportData(filteredData);
+      setReportGenerated(true);
+      toast({ title: "Report Generated (Mock)", description: `Found ${filteredData.length} issues for the selected period.` });
 
     } catch (err: any) {
-      console.error("Error generating report:", err);
-      setError(`Failed to generate report: ${err.message}`);
-      toast({ title: "Report Error", variant: "destructive" });
+      console.error("Error generating mock report:", err);
+      setError(`Failed to generate mock report: ${err.message}`);
+      toast({ title: "Report Error (Mock)", variant: "destructive" });
     } finally {
       setLoading(false);
     }
   };
 
   const handleDownloadReport = () => {
-    if (reportData.length === 0 && !reportGenerated) { // Check if report was generated even if empty
+    if (reportData.length === 0 && !reportGenerated) {
       toast({ title: "No Report", description: "Generate a report first before downloading.", variant: "destructive" });
       return;
     }
@@ -112,24 +171,25 @@ export default function MunicipalReportsPage() {
          return;
      }
 
+    console.log("Simulating CSV download...");
 
     const headers = ['ID', 'Reported Date', 'Reported By', 'Status', 'Caption', 'Address', 'Deadline', 'Municipal Reply'];
     const csvRows = [
       headers.join(','),
       ...reportData.map(row => [
         `"${row.id}"`,
-        `"${format(row.timestamp.toDate(), 'yyyy-MM-dd HH:mm')}"`,
-        `"${row.userName?.replace(/"/g, '""') || 'N/A'}"`, // Include userName
+        `"${safeFormat(row.timestamp, 'yyyy-MM-dd HH:mm')}"`,
+        `"${row.userName?.replace(/"/g, '""') || 'N/A'}"`,
         `"${row.status}"`,
         `"${row.caption.replace(/"/g, '""')}"`,
         `"${row.address?.replace(/"/g, '""') || 'N/A'}"`,
-        `"${row.deadline ? format(row.deadline.toDate(), 'yyyy-MM-dd') : ''}"`,
+        `"${safeFormat(row.deadline, 'yyyy-MM-dd')}"`, // Use safe format
         `"${row.municipalReply?.replace(/"/g, '""') || ''}"`
       ].join(','))
     ];
 
     const csvString = csvRows.join('\n');
-    const blob = new Blob([`\uFEFF${csvString}`], { type: 'text/csv;charset=utf-8;' }); // Add BOM for Excel compatibility
+    const blob = new Blob([`\uFEFF${csvString}`], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
 
     if (link.download !== undefined) {
@@ -143,10 +203,10 @@ export default function MunicipalReportsPage() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      URL.revokeObjectURL(url); // Clean up blob URL
-      toast({ title: "Download Started", description: "Report CSV download initiated." });
+      URL.revokeObjectURL(url);
+      toast({ title: "Download Simulated", description: "CSV file download initiated." });
     } else {
-      toast({ title: "Download Failed", variant: "destructive" });
+      toast({ title: "Download Failed", description: "Browser does not support automatic download.", variant: "destructive" });
     }
   };
 
@@ -263,7 +323,7 @@ export default function MunicipalReportsPage() {
                   <TableBody>
                     {reportData.map((item) => (
                       <TableRow key={item.id}>
-                        <TableCell className="whitespace-nowrap">{format(item.timestamp.toDate(), "PP p")}</TableCell>
+                        <TableCell className="whitespace-nowrap">{safeFormat(item.timestamp, "PP p")}</TableCell>
                         <TableCell className="whitespace-nowrap">{item.userName}</TableCell>
                         <TableCell>
                           <span className={cn("px-2 py-0.5 rounded-full text-xs font-medium border",
@@ -274,7 +334,7 @@ export default function MunicipalReportsPage() {
                         </TableCell>
                         <TableCell className="max-w-[200px] truncate" title={item.caption}>{item.caption}</TableCell>
                         <TableCell className="max-w-[250px] truncate" title={item.address}>{item.address || 'N/A'}</TableCell>
-                        <TableCell className="whitespace-nowrap">{item.deadline ? format(item.deadline.toDate(), "PP") : 'N/A'}</TableCell>
+                        <TableCell className="whitespace-nowrap">{safeFormat(item.deadline, "PP")}</TableCell>
                         <TableCell className="max-w-[200px] truncate" title={item.municipalReply}>{item.municipalReply || ''}</TableCell>
                       </TableRow>
                     ))}

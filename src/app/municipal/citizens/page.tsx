@@ -1,77 +1,96 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, query, orderBy, where } from 'firebase/firestore'; // Added where
-import { db } from '@/lib/firebase/config';
+// Removed Firebase imports (collection, getDocs, query, orderBy, where, db, Timestamp)
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
-import { User as UserIcon, Phone, CalendarDays, Trash2, Search } from 'lucide-react'; // Added Trash2, Search
-import { Button } from '@/components/ui/button'; // Added Button
-import { Input } from '@/components/ui/input'; // Added Input
-import { format } from 'date-fns'; // For date formatting
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'; // Added Alert
+import { User as UserIcon, Phone, CalendarDays, Trash2, Search } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { format, parseISO } from 'date-fns'; // Added parseISO
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
-} from "@/components/ui/alert-dialog"; // Added Alert Dialog
-import { useToast } from '@/hooks/use-toast'; // Added useToast
+} from "@/components/ui/alert-dialog";
+import { useToast } from '@/hooks/use-toast';
 
+// Mock Citizen User Interface
 interface CitizenUser {
-  id: string; // Firestore document ID (UID)
+  id: string; // Mock UID
   phoneNumber: string | null;
   role?: string; // Should be 'citizen'
-  createdAt?: Timestamp; // Added creation timestamp
-  // Add other relevant fields like name if stored
+  createdAt?: string; // ISO String for mock data
   name?: string;
 }
 
+// Sample Mock Citizen Data
+const sampleMockCitizens: CitizenUser[] = [
+  {
+    id: 'mock_citizen_1',
+    phoneNumber: '+91 98765 43210',
+    role: 'citizen',
+    createdAt: new Date(Date.now() - 86400000 * 10).toISOString(), // 10 days ago
+    name: 'Concerned Citizen A',
+  },
+  {
+    id: 'mock_citizen_2',
+    phoneNumber: '+91 12345 67890',
+    role: 'citizen',
+    createdAt: new Date(Date.now() - 86400000 * 25).toISOString(), // 25 days ago
+    name: 'Resident B',
+  },
+   {
+    id: 'mock_citizen_3',
+    phoneNumber: '+91 55555 55555',
+    role: 'citizen',
+    createdAt: new Date(Date.now() - 86400000 * 5).toISOString(), // 5 days ago
+    name: 'Resident C',
+  },
+   {
+    id: 'mock_citizen_user', // From AddPostPage mock
+    phoneNumber: '+91 11111 22222',
+    role: 'citizen',
+    createdAt: new Date(Date.now() - 86400000 * 2).toISOString(), // 2 days ago
+    name: 'Citizen User (Mock)',
+  },
+];
+
 export default function MunicipalCitizensPage() {
   const [citizens, setCitizens] = useState<CitizenUser[]>([]);
-  const [filteredCitizens, setFilteredCitizens] = useState<CitizenUser[]>([]); // For search results
+  const [filteredCitizens, setFilteredCitizens] = useState<CitizenUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const { toast } = useToast();
 
   useEffect(() => {
-    const fetchCitizens = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const usersCol = collection(db, 'users');
-        // Query specifically for users with the 'citizen' role
-        const q = query(usersCol, where('role', '==', 'citizen'), orderBy('createdAt', 'desc')); // Order by creation date
-        const querySnapshot = await getDocs(q);
+    setLoading(true);
+    setError(null);
+    console.log("Frontend-only mode: Loading mock citizens...");
 
-        const citizenData: CitizenUser[] = [];
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          citizenData.push({
-            id: doc.id,
-            phoneNumber: data.phoneNumber || null,
-            role: data.role,
-            createdAt: data.createdAt instanceof Timestamp ? data.createdAt : undefined,
-            name: data.name, // Include name if available
-          });
-        });
+    // Simulate fetching data
+    const timer = setTimeout(() => {
+      try {
+        // Use sample mock data directly
+        const citizenData = [...sampleMockCitizens];
+        // Sort by creation date descending
+        citizenData.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 
         setCitizens(citizenData);
         setFilteredCitizens(citizenData); // Initialize filtered list
-
-        if (citizenData.length === 0) {
-          console.warn("No citizen users found in 'users' collection with role='citizen'.");
-        }
+        console.log("Mock citizens loaded.");
       } catch (err: any) {
-        console.error("Error fetching citizens:", err);
-        setError(`Failed to load citizen list: ${err.message}`);
+        console.error("Error setting mock citizens:", err);
+        setError(`Failed to load citizen list (mock): ${err.message}`);
       } finally {
         setLoading(false);
       }
-    };
+    }, 800); // Simulate delay
 
-    fetchCitizens();
+    return () => clearTimeout(timer); // Cleanup timer
   }, []);
 
    // Handle search filtering
@@ -90,19 +109,13 @@ export default function MunicipalCitizensPage() {
   }, [searchTerm, citizens]);
 
 
-  // Placeholder for delete functionality
+  // Mock delete functionality (shows toast, doesn't actually delete)
   const handleDeleteCitizen = async (userId: string) => {
-     console.warn(`Delete functionality for user ${userId} is not implemented.`);
-     // IMPORTANT: Deleting Firebase Auth users requires Admin SDK (backend).
-     // Deleting the Firestore document alone does NOT delete the Auth user.
-     // This requires a Cloud Function or dedicated backend endpoint.
-     // Example Firestore doc deletion (DOES NOT DELETE AUTH USER):
-     // try {
-     //   await deleteDoc(doc(db, 'users', userId));
-     //   setCitizens(prev => prev.filter(c => c.id !== userId)); // Update UI optimistically
-     //   toast({ title: "Citizen Record Removed", description: "Firestore document deleted (Auth user remains)." });
-     // } catch (err) { toast({ title: "Deletion Error", variant: "destructive" }); }
-      toast({ title: "Delete Not Implemented", description: "Deleting users requires backend logic.", variant: "destructive" });
+     console.warn(`Simulating delete for user ${userId}.`);
+     toast({ title: "Delete Disabled", description: "This action is disabled in frontend-only mode.", variant: "destructive" });
+     // In a real scenario, this would involve backend calls.
+     // For mock: Optionally filter out the user from the local state for demo purposes
+     // setCitizens(prev => prev.filter(c => c.id !== userId));
   };
 
   const CitizenRowSkeleton = () => (
@@ -115,12 +128,22 @@ export default function MunicipalCitizensPage() {
     </TableRow>
   );
 
+  // Helper to parse ISO string safely for date formatting
+  const safeFormatDate = (isoString?: string): string => {
+     if (!isoString) return 'N/A';
+     try {
+        return format(parseISO(isoString), 'PP');
+     } catch {
+        return 'Invalid Date';
+     }
+  }
+
   return (
     <div className="container mx-auto px-4 py-6 space-y-6">
       <Card className="shadow-lg border border-border/50">
         <CardHeader>
           <CardTitle>Citizen Management</CardTitle>
-          <CardDescription>View and manage registered citizen users.</CardDescription>
+          <CardDescription>View registered citizen users (Mock Data).</CardDescription>
            {/* Search Input */}
            <div className="relative mt-4">
              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -183,11 +206,11 @@ export default function MunicipalCitizensPage() {
                       <TableCell>
                          <div className="flex items-center gap-1 text-sm text-muted-foreground">
                           <CalendarDays className="h-4 w-4" />
-                          {citizen.createdAt ? format(citizen.createdAt.toDate(), 'PP') : 'N/A'}
+                           {safeFormatDate(citizen.createdAt)}
                          </div>
                       </TableCell>
                       <TableCell className="text-right">
-                         {/* Delete Citizen Button (Requires Confirmation) */}
+                         {/* Delete Citizen Button (Disabled) */}
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
                               <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10" title="Delete Citizen (Disabled)">
@@ -198,14 +221,12 @@ export default function MunicipalCitizensPage() {
                               <AlertDialogHeader>
                                 <AlertDialogTitle>Confirm Deletion (Disabled)</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  This action is currently disabled. Deleting a user requires backend implementation and removes their authentication access and data permanently.
+                                  This action is disabled in the frontend-only version. Deleting users requires backend integration.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
                                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                {/* <AlertDialogAction onClick={() => handleDeleteCitizen(citizen.id)} className="bg-destructive hover:bg-destructive/90" disabled>
-                                  Confirm Delete
-                                </AlertDialogAction> */}
+                                {/* The actual action button is removed/disabled */}
                               </AlertDialogFooter>
                             </AlertDialogContent>
                           </AlertDialog>
@@ -216,12 +237,8 @@ export default function MunicipalCitizensPage() {
               </TableBody>
             </Table>
           </div>
-          {/* TODO: Add Pagination if the list grows large */}
         </CardContent>
       </Card>
     </div>
   );
 }
-
-// Added Timestamp import
-import { Timestamp } from 'firebase/firestore';

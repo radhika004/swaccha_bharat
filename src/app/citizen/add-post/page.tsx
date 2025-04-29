@@ -3,15 +3,7 @@
 import type { ChangeEvent, FormEvent } from 'react';
 import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  collection,
-  addDoc,
-  serverTimestamp,
-  GeoPoint,
-  Timestamp,
-} from 'firebase/firestore';
-import { ref, uploadBytesResumable, getDownloadURL, type UploadTaskSnapshot } from 'firebase/storage';
-import { db, storage, auth } from '@/lib/firebase/config';
+// Removed Firebase imports (collection, addDoc, serverTimestamp, GeoPoint, Timestamp, ref, uploadBytesResumable, getDownloadURL, UploadTaskSnapshot, db, storage, auth)
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -38,6 +30,7 @@ import {
   UploadCloud,
   Check,
   Image as ImageIcon,
+  X, // Added X import
 } from 'lucide-react';
 import Image from 'next/image';
 import { useToast } from '@/hooks/use-toast';
@@ -55,17 +48,12 @@ interface Location {
   longitude: number;
 }
 
-// Helper function to get address from coordinates (Reverse Geocoding - OpenStreetMap)
+// Mock function since OpenStreetMap fetch is removed
 async function getAddressFromCoordinates(lat: number, lon: number): Promise<string | null> {
-  try {
-    const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&accept-language=en`);
-    if (!response.ok) throw new Error(`Nominatim API error: ${response.statusText}`);
-    const data = await response.json();
-    return data.display_name || null;
-  } catch (error) {
-    console.error('Error fetching address:', error);
-    return null; // Return null on error
-  }
+  console.log(`Mock fetching address for: Lat ${lat}, Lon ${lon}`);
+  await new Promise(resolve => setTimeout(resolve, 500)); // Simulate network delay
+  // Return a mock address or coordinates as fallback
+  return `Mock Address near ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
 }
 
 export default function AddPostPage() {
@@ -77,7 +65,7 @@ export default function AddPostPage() {
   const [deadline, setDeadline] = useState<Date | undefined>(undefined);
   const [isLocating, setIsLocating] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadProgress, setUploadProgress] = useState(0); // Simulate upload progress
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -257,11 +245,9 @@ export default function AddPostPage() {
     e.preventDefault();
     setError(null);
 
-    if (!auth.currentUser) {
-      setError('You must be logged in to post.');
-      toast({ title: 'Not Logged In', variant: 'destructive' });
-      router.push('/auth/citizen'); return;
-    }
+    // Removed user login check as auth is removed
+    // if (!auth.currentUser) { ... }
+
     if (!imageFile) {
       setError('Please select or capture an image.');
       toast({ title: 'Missing Image', variant: 'destructive' });
@@ -276,79 +262,54 @@ export default function AddPostPage() {
     setIsSubmitting(true);
     setUploadProgress(0);
 
-    try {
-      // 1. Upload Image to Firebase Storage
-      const storagePath = `posts/${auth.currentUser.uid}/${Date.now()}_${imageFile.name}`;
-      const imageRef = ref(storage, storagePath);
-      const uploadTask = uploadBytesResumable(imageRef, imageFile);
+    // Simulate upload and post creation
+    console.log('Frontend-only: Simulating post submission...');
+    console.log('Caption:', caption.trim());
+    console.log('Image File:', imageFile.name);
+    console.log('Location:', location);
+    console.log('Address:', address);
+    console.log('Deadline:', deadline);
 
-      uploadTask.on('state_changed',
-        (snapshot: UploadTaskSnapshot) => {
-          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          setUploadProgress(progress);
-          console.log('Upload is ' + progress + '% done');
-        },
-        (uploadError) => {
-          console.error('Upload failed:', uploadError);
-          setError(`Image upload failed: ${uploadError.message}`);
-          toast({ title: 'Upload Failed', variant: 'destructive' });
-          setIsSubmitting(false);
-          setUploadProgress(0);
-        },
-        async () => {
-          // 2. Get Download URL
-          try {
-            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-            console.log('File available at', downloadURL);
+    // Simulate upload progress
+    let progress = 0;
+    const progressInterval = setInterval(() => {
+      progress += 20;
+      setUploadProgress(progress);
+      if (progress >= 100) {
+        clearInterval(progressInterval);
+        console.log('Simulated upload complete.');
 
-            // 3. Prepare Post Data for Firestore
-            const postData: any = {
-              userId: auth.currentUser!.uid,
-              userName: auth.currentUser!.displayName || auth.currentUser!.phoneNumber || 'Citizen User',
-              imageUrl: downloadURL,
-              caption: caption.trim(),
-              timestamp: serverTimestamp(),
-              status: 'pending', // Initial status
-            };
-            if (location) {
-              postData.location = new GeoPoint(location.latitude, location.longitude);
-            }
-            if (address) { // Save the fetched or fallback address
-              postData.address = address;
-            }
-            if (deadline) {
-              postData.deadline = Timestamp.fromDate(deadline);
-            }
-
-            // 4. Add Document to Firestore
-            console.log('Saving post data to Firestore:', postData);
-            const docRef = await addDoc(collection(db, 'posts'), postData);
-            console.log('Post submitted successfully! Document ID:', docRef.id);
-
-            toast({ title: 'Success!', description: 'Your issue has been reported.' });
+        // Simulate post save success
+        setTimeout(() => {
+            toast({ title: 'Success!', description: 'Your issue has been reported (Simulated).' });
             setIsSubmitting(false);
             setUploadProgress(0);
 
-            // 5. Navigate to Home Feed AFTER successful submission
-            router.push('/citizen/home');
+            // Store mock data in local storage (Optional, for persistence in demo)
+            const newPost = {
+                id: `mock_${Date.now()}`, // Generate mock ID
+                imageUrl: imagePreview || 'https://picsum.photos/600/600?grayscale', // Use preview or placeholder
+                caption: caption.trim(),
+                location: location ? { latitude: location.latitude, longitude: location.longitude } : undefined,
+                address: address,
+                timestamp: new Date().toISOString(), // Use ISO string for mock timestamp
+                userId: 'mock_citizen_user', // Mock user ID
+                userName: 'Citizen User (Mock)',
+                status: 'pending',
+                deadline: deadline?.toISOString(),
+            };
+            const existingPosts = JSON.parse(localStorage.getItem('mockPosts') || '[]');
+            localStorage.setItem('mockPosts', JSON.stringify([newPost, ...existingPosts]));
+            console.log('Mock post saved to localStorage.');
 
-          } catch (firestoreError: any) {
-             console.error('Error saving post to Firestore:', firestoreError);
-             setError(`Failed to save post details: ${firestoreError.message}`);
-             toast({ title: 'Submission Failed', description: 'Could not save post details.', variant: 'destructive' });
-             setIsSubmitting(false);
-             setUploadProgress(0);
-          }
-        }
-      );
-    } catch (err: any) {
-      console.error('Error starting upload or preparing data:', err);
-      setError(`Failed to submit post: ${err.message}`);
-      toast({ title: 'Submission Error', variant: 'destructive' });
-      setIsSubmitting(false);
-      setUploadProgress(0);
-    }
-    // Removed finally block as navigation happens inside the upload success callback
+
+            // Navigate to Home Feed AFTER successful mock submission
+            router.push('/citizen/home');
+        }, 500); // Simulate saving delay
+
+      }
+    }, 300); // Simulate upload time
+
   };
 
   return (
@@ -564,21 +525,8 @@ export default function AddPostPage() {
         </CardFooter>
       </Card>
 
-      <p className="text-center text-xs text-muted-foreground mt-6">
-        Address lookup uses{' '}
-        <a
-          href="https://openstreetmap.org/copyright"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="underline hover:text-accent"
-        >
-          OpenStreetMap
-        </a>{' '}
-        data.
-      </p>
+      {/* Removed OpenStreetMap attribution as geocoding is mocked */}
+       {/* <p className="text-center text-xs text-muted-foreground mt-6"> ... </p> */}
     </div>
   );
 }
-
-// Added X icon import
-import { X } from 'lucide-react';

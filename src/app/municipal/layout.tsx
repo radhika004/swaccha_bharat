@@ -5,10 +5,9 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { LayoutDashboard, ListChecks, BarChart3, LogOut, MountainIcon, Users, Settings, Bell } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import AuthProvider from '@/components/auth-provider'; // Use AuthProvider to protect routes
+// Removed AuthProvider and useAuth imports
 import { Button } from '@/components/ui/button';
-import { signOut } from 'firebase/auth';
-import { auth } from '@/lib/firebase/config';
+// Removed signOut, auth imports
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -20,14 +19,21 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'; // For mobile sidebar
-import { Skeleton } from '@/components/ui/skeleton'; // Added Skeleton
-import { useAuth } from '@/components/auth-provider'; // Import useAuth
+// Removed Skeleton and Loader2 imports
+
+// Mock user data since AuthProvider and useAuth are removed
+const mockUser = {
+    displayName: 'Municipal User',
+    photoURL: undefined, // Or a placeholder image URL
+    phoneNumber: '+911234567890'
+};
+const authLoading = false; // Simulate loading as false
 
 export default function MunicipalLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { toast } = useToast();
-  const { user, loading: authLoading, role } = useAuth(); // Get user and loading state
+  // Removed useAuth usage
 
   const navItems = [
     { href: '/municipal/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -38,7 +44,8 @@ export default function MunicipalLayout({ children }: { children: ReactNode }) {
 
   const handleLogout = async () => {
     try {
-      await signOut(auth);
+      // Simulate logout
+      // await signOut(auth); // Removed Firebase signout
       toast({ title: 'Logged Out', description: 'You have been logged out.' });
       router.push('/'); // Redirect to landing page
     } catch (error) {
@@ -54,7 +61,7 @@ export default function MunicipalLayout({ children }: { children: ReactNode }) {
    };
 
   return (
-    <AuthProvider requiredRole="municipal"> {/* Ensure only municipal users access */}
+    // Removed AuthProvider wrapper
       <div className="grid min-h-screen w-full md:grid-cols-[220px_1fr] lg:grid-cols-[280px_1fr]">
         {/* Sidebar */}
         <div className="hidden border-r bg-muted/40 md:block">
@@ -152,12 +159,13 @@ export default function MunicipalLayout({ children }: { children: ReactNode }) {
               <DropdownMenuTrigger asChild>
                  <Button variant="secondary" size="icon" className="rounded-full">
                    {authLoading ? (
-                     <Skeleton className="h-8 w-8 rounded-full" />
+                     //<Skeleton className="h-8 w-8 rounded-full" /> // Removed Skeleton
+                     <div className="h-8 w-8 rounded-full bg-muted"></div> // Placeholder
                    ) : (
                      <Avatar className="h-8 w-8">
-                       <AvatarImage src={user?.photoURL || undefined} alt={user?.displayName || "User"} />
+                       <AvatarImage src={mockUser?.photoURL || undefined} alt={mockUser?.displayName || "User"} />
                        <AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">
-                          {getInitials(user?.displayName)}
+                          {getInitials(mockUser?.displayName)}
                        </AvatarFallback>
                      </Avatar>
                    )}
@@ -165,7 +173,7 @@ export default function MunicipalLayout({ children }: { children: ReactNode }) {
                  </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuLabel>{user?.displayName || user?.phoneNumber || "Municipal User"}</DropdownMenuLabel>
+                <DropdownMenuLabel>{mockUser?.displayName || mockUser?.phoneNumber || "Municipal User"}</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 {/* Add Profile/Settings links if needed */}
                  <DropdownMenuItem disabled>
@@ -183,7 +191,8 @@ export default function MunicipalLayout({ children }: { children: ReactNode }) {
           <main className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6 bg-background">
              {authLoading ? (
                 <div className="flex items-center justify-center flex-1">
-                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    {/* <Loader2 className="h-8 w-8 animate-spin text-primary" /> // Removed Loader2 */}
+                     <p>Loading...</p> // Simple loading text
                 </div>
              ) : (
                 children // Render the actual page content
@@ -191,8 +200,5 @@ export default function MunicipalLayout({ children }: { children: ReactNode }) {
           </main>
         </div>
       </div>
-    </AuthProvider>
   );
 }
-
-import { Loader2 } from 'lucide-react'; // Added Loader2 import

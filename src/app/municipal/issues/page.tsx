@@ -1,8 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, type FormEvent, type ChangeEvent } from 'react';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc, where, Timestamp, serverTimestamp, GeoPoint } from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+// Removed Firebase imports (collection, query, orderBy, onSnapshot, doc, updateDoc, where, Timestamp, serverTimestamp, GeoPoint, db)
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card';
 import Image from 'next/image';
 import { MapPin, Filter, Loader2, MessageSquare, CheckCircle, Send, AlertCircle, CalendarDays, Clock, Trash2 } from 'lucide-react';
@@ -11,137 +10,179 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"; // Import Alert Dialog
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import { format, formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow, parseISO } from 'date-fns'; // Added parseISO
 import { cn } from '@/lib/utils';
 
-interface Post {
+interface MockLocation {
+  latitude: number;
+  longitude: number;
+}
+
+// Adjusted MockPost interface to use strings for dates
+interface MockPost {
   id: string;
   imageUrl: string;
   caption: string;
-  location?: GeoPoint;
+  location?: MockLocation;
   address?: string;
-  timestamp: Timestamp;
+  timestamp: string; // ISO String
   userId: string;
   userName?: string;
   status?: 'pending' | 'solved';
   municipalReply?: string;
-  deadline?: Timestamp;
-  solvedTimestamp?: Timestamp;
+  deadline?: string; // ISO String
+  solvedTimestamp?: string; // ISO String
 }
 
-// Helper to format Firestore Timestamp (e.g., "Aug 15, 2024, 10:30 AM")
-const formatFullDate = (timestamp: Timestamp): string => {
-  if (!timestamp?.toDate) return 'Invalid date';
+// Sample Mock Data
+const sampleMockPosts: MockPost[] = [
+  {
+    id: 'mock1',
+    imageUrl: 'https://picsum.photos/600/600?random=1',
+    caption: 'Overflowing bin near the park entrance. Needs immediate attention.',
+    location: { latitude: 19.0760, longitude: 72.8777 },
+    address: 'Near Central Park Entrance, Mock City',
+    timestamp: new Date(Date.now() - 86400000).toISOString(),
+    userId: 'mock_citizen_1',
+    userName: 'Concerned Citizen A',
+    status: 'pending',
+    deadline: new Date(Date.now() + 86400000 * 2).toISOString(),
+  },
+  {
+    id: 'mock3',
+    imageUrl: 'https://picsum.photos/600/600?random=3',
+    caption: 'Street light not working on Elm Street.',
+    address: '456 Elm Street, Mock City',
+    timestamp: new Date(Date.now() - 86400000 * 5).toISOString(),
+    userId: 'mock_citizen_3',
+    userName: 'Resident C',
+    status: 'pending',
+  },
+   {
+    id: 'mock_local_1', // Example from potential localStorage
+    imageUrl: 'https://picsum.photos/600/600?random=4',
+    caption: 'Pothole on Oak Avenue',
+    location: { latitude: 19.0780, longitude: 72.8800 },
+    address: 'Oak Avenue, Mock City',
+    timestamp: new Date(Date.now() - 86400000 * 2).toISOString(),
+    userId: 'mock_citizen_user',
+    userName: 'Citizen User (Mock)',
+    status: 'pending',
+    deadline: new Date(Date.now() + 86400000 * 7).toISOString(),
+  },
+  {
+    id: 'mock2',
+    imageUrl: 'https://picsum.photos/600/600?random=2',
+    caption: 'Drainage blocked on Main Street. Water logging during rains.',
+    address: '123 Main Street, Mock City',
+    timestamp: new Date(Date.now() - 86400000 * 3).toISOString(),
+    userId: 'mock_citizen_2',
+    userName: 'Resident B',
+    status: 'solved',
+    municipalReply: 'The drainage has been cleared by our team.',
+    solvedTimestamp: new Date(Date.now() - 86400000).toISOString(),
+  },
+];
+
+
+// Helper to parse ISO string and format (handle errors gracefully)
+const parseAndFormatDate = (isoString: string | undefined, formatFn: (date: Date, options?: any) => string, options?: any): string => {
+  if (!isoString) return 'Invalid date';
   try {
-    return format(timestamp.toDate(), "MMM d, yyyy, h:mm a");
-  } catch (e) { console.error("Error formatting full date:", e); return "Error date"; }
+    const date = parseISO(isoString);
+    return formatFn(date, options);
+  } catch (e) {
+    console.error("Error parsing/formatting date:", e, isoString);
+    return "Error date";
+  }
 };
 
-// Helper to format date relative to now (e.g., "2 days ago")
-const formatRelativeDate = (timestamp: Timestamp): string => {
-  if (!timestamp?.toDate) return 'a while ago';
-  try {
-    return formatDistanceToNow(timestamp.toDate(), { addSuffix: true });
-  } catch (e) { console.error("Error formatting relative date:", e); return 'Error date'; }
-};
-
-// Helper to format deadline date (e.g., "Aug 20, 2024")
-const formatDeadline = (timestamp?: Timestamp): string | null => {
-  if (!timestamp?.toDate) return null;
-  try {
-    return format(timestamp.toDate(), "MMM d, yyyy");
-  } catch (e) { console.error("Error formatting deadline:", e); return 'Error date'; }
+const formatFullDate = (isoString: string): string => parseAndFormatDate(isoString, (d) => format(d, "MMM d, yyyy, h:mm a"));
+const formatRelativeDate = (isoString: string): string => parseAndFormatDate(isoString, formatDistanceToNow, { addSuffix: true }) || 'a while ago';
+const formatDeadline = (isoString?: string): string | null => {
+     if (!isoString) return null;
+     return parseAndFormatDate(isoString, (d) => format(d, "MMM d, yyyy"));
 };
 
 
 export default function MunicipalIssuesPage() {
-  const [posts, setPosts] = useState<Post[]>([]);
+  const [allPosts, setAllPosts] = useState<MockPost[]>([]); // Store all mock posts
+  const [filteredPosts, setFilteredPosts] = useState<MockPost[]>([]); // Posts to display based on filter
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<'pending' | 'solved' | 'all'>('pending'); // Default to pending
-  const [selectedPost, setSelectedPost] = useState<Post | null>(null); // For reply dialog
+  const [filter, setFilter] = useState<'pending' | 'solved' | 'all'>('pending');
+  const [selectedPost, setSelectedPost] = useState<MockPost | null>(null);
   const [replyText, setReplyText] = useState('');
   const [isReplying, setIsReplying] = useState(false);
-  const [isUpdatingStatus, setIsUpdatingStatus] = useState<Record<string, boolean>>({}); // Loading state per post
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState<Record<string, boolean>>({});
   const [dialogError, setDialogError] = useState<string | null>(null);
   const { toast } = useToast();
 
 
+  // Load initial mock data
   useEffect(() => {
     setLoading(true);
     setError(null);
-    console.log(`Setting up listener for filter: ${filter}`);
-
-    let q;
-    const postsCol = collection(db, 'posts');
+    console.log("Frontend-only mode: Loading initial mock issues...");
 
     try {
-      if (filter === 'all') {
-        q = query(postsCol, orderBy('timestamp', 'desc'));
-      } else {
-        q = query(postsCol, where('status', '==', filter), orderBy('timestamp', 'desc'));
-      }
-    } catch (queryError: any) {
-        console.error("Error creating Firestore query:", queryError);
-        setError(`Failed to build query: ${queryError.message}`);
-        setLoading(false);
-        return;
-    }
+        // Try loading from localStorage first (to include posts added via AddPostPage mock)
+        const storedPosts = localStorage.getItem('mockPosts');
+        let combinedPosts: MockPost[] = [];
 
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      console.log(`Snapshot received for filter '${filter}'. Documents: ${querySnapshot.size}`);
-      const postsData: Post[] = [];
-      let invalidCount = 0;
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        // Basic validation (add more as needed)
-        if (!data.imageUrl || !data.caption || !data.timestamp || !data.userId) {
-          console.warn(`Skipping post ${doc.id}: Missing required fields.`, data); invalidCount++; return;
+        if (storedPosts) {
+             try {
+                const parsedStoredPosts = JSON.parse(storedPosts);
+                // Filter out any invalid entries just in case
+                combinedPosts = parsedStoredPosts.filter((p: any) => p.id && p.timestamp);
+                console.log(`Loaded ${combinedPosts.length} mock posts from localStorage.`);
+            } catch (parseError) {
+                console.error("Error parsing localStorage posts:", parseError);
+                // Fallback to sample data if parsing fails
+                 combinedPosts = [...sampleMockPosts];
+                 localStorage.removeItem('mockPosts'); // Clear corrupted data
+            }
+        } else {
+             combinedPosts = [...sampleMockPosts]; // Use sample data if nothing in storage
         }
-         if (!(data.timestamp instanceof Timestamp)) {
-           console.warn(`Skipping post ${doc.id}: Invalid timestamp type.`, data.timestamp); invalidCount++; return;
-         }
-         if (data.location && !(data.location instanceof GeoPoint)) {
-             console.warn(`Skipping post ${doc.id}: Invalid location type.`, data.location); invalidCount++; return;
-         }
-         if (data.deadline && !(data.deadline instanceof Timestamp)) { data.deadline = undefined; }
-         if (data.solvedTimestamp && !(data.solvedTimestamp instanceof Timestamp)) { data.solvedTimestamp = undefined; }
 
-        postsData.push({
-            id: doc.id,
-            imageUrl: data.imageUrl,
-            caption: data.caption,
-            location: data.location,
-            address: data.address,
-            timestamp: data.timestamp,
-            userId: data.userId,
-            userName: data.userName || 'Citizen User',
-            status: data.status === 'solved' ? 'solved' : 'pending',
-            municipalReply: data.municipalReply,
-            deadline: data.deadline,
-            solvedTimestamp: data.solvedTimestamp
-        });
-      });
-       if (invalidCount > 0) console.log(`Skipped ${invalidCount} invalid posts.`);
-      setPosts(postsData);
-      setLoading(false);
-    }, (err) => {
-      console.error(`Error fetching posts (filter: ${filter}): `, err);
-      setError(`Failed to load issues. Please try again. (Code: ${err.code})`);
-      setLoading(false);
-    });
+         // Ensure sample posts are included if not already present from storage (simple check)
+         sampleMockPosts.forEach(samplePost => {
+            if (!combinedPosts.some(p => p.id === samplePost.id)) {
+                combinedPosts.push(samplePost);
+            }
+         });
 
-    // Cleanup subscription on unmount
-    return () => {
-        console.log(`Unsubscribing listener (filter: ${filter})`);
-        unsubscribe();
+        // Sort by timestamp descending
+        combinedPosts.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+        setAllPosts(combinedPosts);
+        setLoading(false);
+        console.log("Initial mock issues loaded.");
+
+    } catch (err: any) {
+         console.error("Error loading initial mock issues: ", err);
+         setError(`Failed to load mock issues. ${err.message}`);
+         setLoading(false);
     }
-  }, [filter]); // Re-run effect when filter changes
+  }, []); // Load only once on mount
 
-  const handleOpenReplyDialog = (post: Post) => {
+  // Apply filter whenever allPosts or filter changes
+  useEffect(() => {
+    console.log(`Applying filter: ${filter}`);
+    if (filter === 'all') {
+      setFilteredPosts(allPosts);
+    } else {
+      setFilteredPosts(allPosts.filter(post => post.status === filter));
+    }
+     console.log(`Filtered posts count: ${filteredPosts.length}`);
+  }, [filter, allPosts]); // React to changes in filter or the base data
+
+
+  const handleOpenReplyDialog = (post: MockPost) => {
     setSelectedPost(post);
     setReplyText(post.municipalReply || '');
     setDialogError(null);
@@ -154,6 +195,7 @@ export default function MunicipalIssuesPage() {
     setIsReplying(false);
   };
 
+  // Simulate sending reply and updating status
   const handleSendReply = async (e: FormEvent) => {
     e.preventDefault();
     if (!selectedPost || !replyText.trim()) {
@@ -162,18 +204,39 @@ export default function MunicipalIssuesPage() {
     };
     setIsReplying(true);
     setDialogError(null);
+    console.log(`Simulating reply for post ${selectedPost.id}: ${replyText.trim()}`);
+
+    // Simulate async operation
+    await new Promise(resolve => setTimeout(resolve, 700));
+
     try {
-      const postRef = doc(db, 'posts', selectedPost.id);
-      await updateDoc(postRef, {
-        municipalReply: replyText.trim(),
-        status: 'solved', // Mark as solved when replying
-        solvedTimestamp: serverTimestamp()
-      });
-      toast({ title: "Reply Sent", description: "Issue marked as solved." });
+      // Update the state locally
+      setAllPosts(prevPosts =>
+        prevPosts.map(p =>
+          p.id === selectedPost.id
+            ? {
+                ...p,
+                municipalReply: replyText.trim(),
+                status: 'solved',
+                solvedTimestamp: new Date().toISOString()
+              }
+            : p
+        )
+      );
+       // Update localStorage as well (Optional)
+       const updatedLocalStoragePosts = allPosts.map(p =>
+           p.id === selectedPost.id
+            ? { ...p, municipalReply: replyText.trim(), status: 'solved', solvedTimestamp: new Date().toISOString() }
+            : p
+       );
+       localStorage.setItem('mockPosts', JSON.stringify(updatedLocalStoragePosts));
+
+
+      toast({ title: "Reply Sent (Simulated)", description: "Issue marked as solved." });
       handleCloseReplyDialog();
     } catch (err: any) {
-      console.error("Error sending reply:", err);
-      const message = `Failed to send reply: ${err.message}`;
+      console.error("Error simulating reply:", err);
+      const message = `Failed to send reply (simulated): ${err.message}`;
       setDialogError(message);
       toast({ title: "Reply Error", description: message, variant: "destructive" });
     } finally {
@@ -181,41 +244,62 @@ export default function MunicipalIssuesPage() {
     }
   };
 
+  // Simulate marking as solved
   const handleMarkAsSolved = async (postId: string) => {
     if (!postId) return;
     setIsUpdatingStatus(prev => ({ ...prev, [postId]: true }));
+    console.log(`Simulating marking post ${postId} as solved.`);
+
+    // Simulate async operation
+    await new Promise(resolve => setTimeout(resolve, 500));
+
     try {
-      const postRef = doc(db, 'posts', postId);
-      await updateDoc(postRef, {
-        status: 'solved',
-        solvedTimestamp: serverTimestamp()
-        // Optionally clear reply if marking solved without comment?
-        // municipalReply: '',
-      });
-      toast({ title: "Status Updated", description: "Issue marked as solved." });
+       // Update the state locally
+       setAllPosts(prevPosts =>
+        prevPosts.map(p =>
+          p.id === postId
+            ? { ...p, status: 'solved', solvedTimestamp: new Date().toISOString() }
+            : p
+        )
+       );
+       // Update localStorage as well (Optional)
+        const updatedLocalStoragePosts = allPosts.map(p =>
+           p.id === postId
+            ? { ...p, status: 'solved', solvedTimestamp: new Date().toISOString() }
+            : p
+        );
+       localStorage.setItem('mockPosts', JSON.stringify(updatedLocalStoragePosts));
+
+      toast({ title: "Status Updated (Simulated)", description: "Issue marked as solved." });
     } catch (err: any) {
-      console.error("Error marking as solved:", err);
-      toast({ title: "Update Error", description: `Failed to update status: ${err.message}`, variant: "destructive" });
+      console.error("Error simulating mark as solved:", err);
+      toast({ title: "Update Error", description: `Failed to update status (simulated): ${err.message}`, variant: "destructive" });
     } finally {
       setIsUpdatingStatus(prev => ({ ...prev, [postId]: false }));
     }
   };
 
-   // Placeholder for delete functionality
+   // Simulate delete
    const handleDeleteIssue = async (postId: string) => {
-    console.warn(`Delete functionality for post ${postId} is not implemented.`);
-    // TODO: Implement deletion logic if required (consider implications)
-    // Example:
-    // try {
-    //   const postRef = doc(db, 'posts', postId);
-    //   await deleteDoc(postRef);
-    //   // Optionally delete associated image from Storage
-    //   toast({ title: "Issue Deleted" });
-    // } catch (err: any) {
-    //   console.error("Error deleting issue:", err);
-    //   toast({ title: "Deletion Error", description: err.message, variant: "destructive" });
-    // }
-     toast({ title: "Delete Not Implemented", description: "This feature is not yet available.", variant: "destructive" });
+     console.warn(`Simulating delete for post ${postId}.`);
+     setIsUpdatingStatus(prev => ({ ...prev, [postId]: true })); // Use loading state for delete button too
+
+     await new Promise(resolve => setTimeout(resolve, 500)); // Simulate delay
+
+     try {
+        // Update state
+        setAllPosts(prevPosts => prevPosts.filter(p => p.id !== postId));
+        // Update localStorage (Optional)
+        const updatedLocalStoragePosts = allPosts.filter(p => p.id !== postId);
+        localStorage.setItem('mockPosts', JSON.stringify(updatedLocalStoragePosts));
+
+        toast({ title: "Issue Deleted (Simulated)" });
+     } catch(err: any) {
+        toast({ title: "Deletion Error (Simulated)", description: err.message, variant: "destructive" });
+     } finally {
+        setIsUpdatingStatus(prev => ({ ...prev, [postId]: false }));
+     }
+
    };
 
 
@@ -277,7 +361,7 @@ export default function MunicipalIssuesPage() {
       <div className="space-y-6">
         {loading ? (
            <> <PostCardSkeleton /> <PostCardSkeleton /> </>
-        ) : posts.length === 0 ? (
+        ) : filteredPosts.length === 0 ? (
            <Card className="text-center py-12 px-6 border-dashed border-border">
                 <CardContent>
                    <h3 className="text-lg font-medium text-muted-foreground">No {filter !== 'all' ? filter : ''} issues found.</h3>
@@ -287,9 +371,10 @@ export default function MunicipalIssuesPage() {
                 </CardContent>
             </Card>
         ) : (
-          posts.map((post) => {
+          filteredPosts.map((post) => {
             const formattedDeadline = formatDeadline(post.deadline);
-            const isOverdue = post.status === 'pending' && post.deadline && new Date() > post.deadline.toDate();
+            const deadlineDate = post.deadline ? parseISO(post.deadline) : null;
+            const isOverdue = post.status === 'pending' && deadlineDate && new Date() > deadlineDate;
 
             return (
               <Card key={post.id} className="w-full overflow-hidden shadow-lg rounded-lg border border-border bg-card">
@@ -405,23 +490,23 @@ export default function MunicipalIssuesPage() {
                       <MessageSquare className="h-4 w-4 mr-1"/> {post.municipalReply ? 'Edit Reply' : 'Add Reply'}
                     </Button>
                   )}
-                   {/* Optional: Delete Button */}
+                   {/* Delete Button (Simulated) */}
                     <AlertDialog>
                        <AlertDialogTrigger asChild>
-                           <Button variant="destructive" size="icon" className="h-9 w-9" title="Delete Issue (Not Implemented)">
-                              <Trash2 className="h-4 w-4" />
+                           <Button variant="destructive" size="icon" className="h-9 w-9" title="Delete Issue (Simulated)" disabled={isUpdatingStatus[post.id]}>
+                              {isUpdatingStatus[post.id]? <Loader2 className="h-4 w-4 animate-spin"/> : <Trash2 className="h-4 w-4" />}
                            </Button>
                        </AlertDialogTrigger>
                        <AlertDialogContent>
                            <AlertDialogHeader>
-                           <AlertDialogTitle>Confirm Deletion (Not Active)</AlertDialogTitle>
+                           <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
                            <AlertDialogDescription>
-                                This action is currently disabled. Deleting issues permanently removes them.
+                                Are you sure you want to delete this issue? This action cannot be undone.
                            </AlertDialogDescription>
                            </AlertDialogHeader>
                            <AlertDialogFooter>
-                           <AlertDialogCancel>Cancel</AlertDialogCancel>
-                           {/* <AlertDialogAction onClick={() => handleDeleteIssue(post.id)} disabled>Confirm Delete</AlertDialogAction> */}
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDeleteIssue(post.id)} className="bg-destructive hover:bg-destructive/90">Confirm Delete</AlertDialogAction>
                            </AlertDialogFooter>
                        </AlertDialogContent>
                    </AlertDialog>
@@ -432,7 +517,7 @@ export default function MunicipalIssuesPage() {
         )}
       </div>
 
-      {/* Reply Dialog */}
+      {/* Reply Dialog (Remains mostly the same, but onSubmit calls simulated function) */}
       <Dialog open={!!selectedPost} onOpenChange={(open) => !open && handleCloseReplyDialog()}>
         <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>

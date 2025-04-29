@@ -1,15 +1,14 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, getCountFromServer, onSnapshot } from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+// Removed Firebase imports (collection, query, where, getCountFromServer, onSnapshot, db)
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { AlertTriangle, CheckCircle2, ListTodo, Loader2 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, ResponsiveContainer } from 'recharts';
 import { ChartTooltipContent, ChartContainer, ChartTooltip, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
 import type { ChartConfig } from '@/components/ui/chart';
-import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
-import { Alert, AlertTitle } from '@/components/ui/alert'; // Import Alert
+import { Skeleton } from '@/components/ui/skeleton'; // Keep Skeleton for loading simulation
+import { Alert, AlertTitle } from '@/components/ui/alert';
 
 interface IssueStats {
   total: number;
@@ -17,8 +16,15 @@ interface IssueStats {
   pending: number;
 }
 
-// Example data structure for chart (replace with actual data fetching)
-const chartDataExample = [
+// Mock data for stats
+const mockStats: IssueStats = {
+  total: 54,
+  solved: 35,
+  pending: 19,
+};
+
+// Mock data for chart
+const mockChartData = [
   { month: 'Jan', total: 12, solved: 8, pending: 4 },
   { month: 'Feb', total: 19, solved: 10, pending: 9 },
   { month: 'Mar', total: 15, solved: 12, pending: 3 },
@@ -38,140 +44,32 @@ export default function MunicipalDashboardPage() {
   const [stats, setStats] = useState<IssueStats>({ total: 0, solved: 0, pending: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [chartData, setChartData] = useState(chartDataExample); // Use example data for now
+  const [chartData, setChartData] = useState(mockChartData); // Use mock data
 
   useEffect(() => {
     setLoading(true);
     setError(null);
+    console.log("Frontend-only mode: Loading mock dashboard data...");
 
-    const postsCol = collection(db, 'posts');
-    let initialLoadComplete = false;
-    let fetchedStats: Partial<IssueStats> = {}; // Store intermediate results
-
-    const updateLoadingState = () => {
-      // Check if all stats have been fetched at least once
-      if (fetchedStats.total !== undefined && fetchedStats.solved !== undefined && fetchedStats.pending !== undefined && !initialLoadComplete) {
-        setLoading(false);
-        initialLoadComplete = true;
-        console.log("Initial stats load complete.");
-      }
-    };
-
-     // Use getCountFromServer for initial load (less efficient but simpler for initial count)
-     const fetchInitialCounts = async () => {
+    // Simulate data fetching delay
+    const timer = setTimeout(() => {
       try {
-        const totalSnapshot = await getCountFromServer(postsCol);
-        const solvedQuery = query(postsCol, where('status', '==', 'solved'));
-        const solvedSnapshot = await getCountFromServer(solvedQuery);
-        const pendingQuery = query(postsCol, where('status', '==', 'pending'));
-        const pendingSnapshot = await getCountFromServer(pendingQuery);
-
-        fetchedStats = {
-          total: totalSnapshot.data().count,
-          solved: solvedSnapshot.data().count,
-          pending: pendingSnapshot.data().count,
-        };
-        setStats(fetchedStats as IssueStats);
-        updateLoadingState();
-
+        setStats(mockStats);
+        setChartData(mockChartData); // Already set, but could simulate fetching here
+        setLoading(false);
+        console.log("Mock dashboard data loaded.");
       } catch (err: any) {
-         console.error("Error fetching initial counts:", err);
-         if (err.code === 'failed-precondition' && err.message.includes('Cloud Firestore API')) {
-             setError("Firestore API is not enabled. Please enable it in your Google Cloud console.");
-         } else {
-            setError("Failed to load initial dashboard statistics.");
-         }
-         setLoading(false); // Stop loading on initial fetch error
-         // Don't proceed to setup listeners if initial fetch fails catastrophically
-         return false; // Indicate failure
+        console.error("Error setting mock data:", err);
+        setError("Failed to load dashboard statistics (mock).");
+        setLoading(false);
       }
-      return true; // Indicate success
-    };
+    }, 1000); // Simulate 1 second delay
 
-    // Set up real-time listeners after initial fetch
-    const setupListeners = () => {
-      const listeners: (() => void)[] = []; // Array to hold unsubscribe functions
-
-      // Listener for ALL posts (more accurate total count)
-      const unsubscribeTotal = onSnapshot(postsCol, (snap) => {
-        const totalCount = snap.size;
-        console.log("Realtime update: Total posts =", totalCount);
-        setStats(prev => {
-            const newSolved = prev.solved ?? 0; // Use 0 if undefined
-            return { ...prev, total: totalCount, pending: totalCount - newSolved };
-        });
-         fetchedStats.total = totalCount; // Update intermediate tracker
-         updateLoadingState(); // Check if initial load complete
-      }, (err) => {
-        console.error("Total count listener error:", err);
-        setError("Error listening for total issue updates.");
-        // Potentially stop loading or show specific error state
-      });
-      listeners.push(unsubscribeTotal);
-
-      // Listener for SOLVED posts
-      const solvedQuery = query(postsCol, where('status', '==', 'solved'));
-      const unsubscribeSolved = onSnapshot(solvedQuery, (snap) => {
-        const solvedCount = snap.size;
-         console.log("Realtime update: Solved posts =", solvedCount);
-        setStats(prev => {
-            const newTotal = prev.total ?? 0; // Use 0 if undefined
-            return { ...prev, solved: solvedCount, pending: newTotal - solvedCount };
-        });
-         fetchedStats.solved = solvedCount; // Update intermediate tracker
-         updateLoadingState(); // Check if initial load complete
-      }, (err) => {
-        console.error("Solved count listener error:", err);
-        setError("Error listening for solved issue updates.");
-      });
-      listeners.push(unsubscribeSolved);
-
-       // Listener for PENDING posts (explicit listener for redundancy/clarity)
-       const pendingQuery = query(postsCol, where('status', '==', 'pending'));
-       const unsubscribePending = onSnapshot(pendingQuery, (snap) => {
-           const pendingCount = snap.size;
-            console.log("Realtime update: Pending posts =", pendingCount);
-           setStats(prev => ({ ...prev, pending: pendingCount }));
-            fetchedStats.pending = pendingCount; // Update intermediate tracker
-            updateLoadingState(); // Check if initial load complete
-       }, (err) => {
-            console.error("Pending count listener error:", err);
-            setError("Error listening for pending issue updates.");
-        });
-        listeners.push(unsubscribePending);
-
-
-      // Return cleanup function
-      return () => {
-        console.log("Cleaning up dashboard Firestore listeners...");
-        listeners.forEach(unsub => unsub());
-      };
-    };
-
-     // Run initial fetch, then setup listeners if successful
-     fetchInitialCounts().then(success => {
-        if (success) {
-            // Assign cleanup function for useEffect return
-             // eslint-disable-next-line react-hooks/exhaustive-deps
-            cleanupListeners = setupListeners();
-        }
-     });
-
-     let cleanupListeners = () => {}; // Placeholder cleanup
-
-    // Cleanup listeners on component unmount
-    return () => cleanupListeners();
+    // Cleanup timer on component unmount
+    return () => clearTimeout(timer);
 
   }, []); // Run effect only once on mount
 
-
-  // TODO: Replace chartDataExample with actual fetched data
-  // useEffect(() => {
-  //   // Fetch real chart data based on time ranges or categories
-  //   // Example: Fetch issues per month for the last 6 months
-  //   const fetchChartData = async () => { ... };
-  //   fetchChartData().then(data => setChartData(data));
-  // }, []);
 
   return (
     <div className="container mx-auto px-4 py-6 space-y-6">
@@ -241,8 +139,8 @@ export default function MunicipalDashboardPage() {
       {/* Chart Section */}
       <Card className="shadow-md border-border/50">
         <CardHeader>
-          <CardTitle>Issue Trends (Example Data)</CardTitle>
-          <CardDescription>Monthly reported vs. solved issues (replace with real data).</CardDescription>
+          <CardTitle>Issue Trends</CardTitle>
+          <CardDescription>Monthly reported vs. solved issues (Mock Data).</CardDescription>
         </CardHeader>
         <CardContent className="pl-2"> {/* Adjust padding for axis labels */}
           {loading ? (
@@ -265,10 +163,10 @@ export default function MunicipalDashboardPage() {
                      tickMargin={8}
                      width={30} // Allocate space for Y-axis labels
                   />
-                  <ChartTooltip
-                    cursor={false}
-                    content={<ChartTooltipContent indicator="dot" />}
-                  />
+                   <ChartTooltip
+                      cursor={false}
+                      content={<ChartTooltipContent indicator="dot" />}
+                   />
                    <ChartLegend content={<ChartLegendContent />} />
                   {/* Using theme colors */}
                   <Bar dataKey="pending" stackId="a" fill="var(--color-pending)" radius={[0, 0, 0, 0]} />

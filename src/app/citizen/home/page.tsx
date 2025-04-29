@@ -1,8 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { collection, query, orderBy, onSnapshot, Timestamp, GeoPoint } from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+// Removed Firebase imports (collection, query, orderBy, onSnapshot, Timestamp, GeoPoint, db)
 import { Card, CardContent, CardHeader, CardFooter } from '@/components/ui/card';
 import Image from 'next/image';
 import { MapPin, User, Clock, CalendarDays, Heart, MessageCircle, Send, CheckCircle2, AlertTriangle, CircleEllipsis } from 'lucide-react';
@@ -11,129 +10,121 @@ import Link from 'next/link';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, parseISO } from 'date-fns'; // Added parseISO
 import { cn } from '@/lib/utils';
 
-interface Post {
+interface MockLocation {
+  latitude: number;
+  longitude: number;
+}
+
+interface MockPost {
   id: string;
   imageUrl: string;
   caption: string;
-  location?: GeoPoint;
+  location?: MockLocation; // Use simple object for mock
   address?: string;
-  timestamp: Timestamp;
+  timestamp: string; // Use ISO string for mock
   userId: string;
   userName?: string;
   status?: 'pending' | 'solved';
   municipalReply?: string;
-  deadline?: Timestamp;
-  solvedTimestamp?: Timestamp;
+  deadline?: string; // Use ISO string for mock
+  solvedTimestamp?: string; // Use ISO string for mock
 }
 
-// Helper to format Firestore Timestamp (e.g., "Aug 15, 2024, 10:30 AM")
-const formatFullDate = (timestamp: Timestamp): string => {
-  if (!timestamp?.toDate) return 'Invalid date';
+// Sample Mock Data (if localStorage is empty)
+const sampleMockPosts: MockPost[] = [
+  {
+    id: 'mock1',
+    imageUrl: 'https://picsum.photos/600/600?random=1',
+    caption: 'Overflowing bin near the park entrance. Needs immediate attention.',
+    location: { latitude: 19.0760, longitude: 72.8777 }, // Mock Mumbai coords
+    address: 'Near Central Park Entrance, Mock City',
+    timestamp: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
+    userId: 'mock_citizen_1',
+    userName: 'Concerned Citizen A',
+    status: 'pending',
+    deadline: new Date(Date.now() + 86400000 * 2).toISOString(), // 2 days from now
+  },
+  {
+    id: 'mock2',
+    imageUrl: 'https://picsum.photos/600/600?random=2',
+    caption: 'Drainage blocked on Main Street. Water logging during rains.',
+    address: '123 Main Street, Mock City',
+    timestamp: new Date(Date.now() - 86400000 * 3).toISOString(), // 3 days ago
+    userId: 'mock_citizen_2',
+    userName: 'Resident B',
+    status: 'solved',
+    municipalReply: 'The drainage has been cleared by our team.',
+    solvedTimestamp: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
+  },
+];
+
+// Helper to parse ISO string and format (handle errors gracefully)
+const parseAndFormatDate = (isoString: string | undefined, formatFn: (date: Date, options?: any) => string, options?: any): string => {
+  if (!isoString) return 'Invalid date';
   try {
-    return timestamp.toDate().toLocaleDateString('en-US', {
+    const date = parseISO(isoString);
+    return formatFn(date, options);
+  } catch (e) {
+    console.error("Error parsing/formatting date:", e, isoString);
+    return "Error date";
+  }
+};
+
+const formatFullDate = (isoString: string): string => parseAndFormatDate(isoString, (d) => d.toLocaleDateString('en-US', {
       year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-    });
-  } catch (e) { console.error("Error formatting full date:", e, timestamp); return "Error date"; }
+    }));
+
+const formatRelativeDate = (isoString: string): string => parseAndFormatDate(isoString, formatDistanceToNow, { addSuffix: true }) || 'a while ago';
+
+const formatDeadline = (isoString?: string): string | null => {
+     if (!isoString) return null;
+     return parseAndFormatDate(isoString, (d) => d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }));
 };
 
-// Helper to format date relative to now (e.g., "2 days ago")
-const formatRelativeDate = (timestamp: Timestamp): string => {
-  if (!timestamp?.toDate) return 'a while ago';
-  try {
-    return formatDistanceToNow(timestamp.toDate(), { addSuffix: true });
-  } catch (e) { console.error("Error formatting relative date:", e, timestamp); return 'Error date'; }
-};
-
-// Helper to format deadline date (e.g., "Aug 20, 2024")
-const formatDeadline = (timestamp?: Timestamp): string | null => {
-  if (!timestamp?.toDate) return null;
-  try {
-    return timestamp.toDate().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-  } catch (e) { console.error("Error formatting deadline:", e, timestamp); return 'Error date'; }
-};
 
 export default function CitizenHomePage() {
-  const [posts, setPosts] = useState<Post[]>([]);
+  const [posts, setPosts] = useState<MockPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    console.log("Setting up Firestore listener for posts...");
+    console.log("Frontend-only mode: Loading mock posts...");
     setLoading(true);
     setError(null);
 
-    const q = query(collection(db, 'posts'), orderBy('timestamp', 'desc'));
+    try {
+        // Try loading from localStorage first
+        const storedPosts = localStorage.getItem('mockPosts');
+        let postsData: MockPost[] = [];
 
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      console.log(`Snapshot received. Documents: ${querySnapshot.size}. Pending writes: ${querySnapshot.metadata.hasPendingWrites}`);
-      const postsData: Post[] = [];
-      let skippedCount = 0;
-
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        // --- Data Validation ---
-        if (!data.imageUrl || !data.caption || !data.timestamp || !data.userId) {
-          console.warn(`Skipping post ${doc.id} due to missing required fields. Data:`, data);
-          skippedCount++;
-          return;
-        }
-        if (!(data.timestamp instanceof Timestamp)) {
-          console.warn(`Skipping post ${doc.id} due to invalid timestamp type. Received:`, data.timestamp);
-          skippedCount++;
-          return;
-        }
-        if (data.location && !(data.location instanceof GeoPoint)) {
-           console.warn(`Skipping post ${doc.id} due to invalid location type. Received:`, data.location);
-           skippedCount++;
-           return; // Skip if location exists but is wrong type
-        }
-         if (data.deadline && !(data.deadline instanceof Timestamp)) {
-            console.warn(`Post ${doc.id} has invalid deadline type, ignoring deadline. Received:`, data.deadline);
-            data.deadline = undefined;
-         }
-         if (data.solvedTimestamp && !(data.solvedTimestamp instanceof Timestamp)) {
-            console.warn(`Post ${doc.id} has invalid solvedTimestamp type, ignoring solved time. Received:`, data.solvedTimestamp);
-            data.solvedTimestamp = undefined;
+        if (storedPosts) {
+            postsData = JSON.parse(storedPosts);
+            console.log(`Loaded ${postsData.length} mock posts from localStorage.`);
+        } else {
+            postsData = sampleMockPosts; // Use sample data if nothing in storage
+            console.log("Using sample mock posts as localStorage is empty.");
         }
 
-        postsData.push({
-          id: doc.id,
-          imageUrl: data.imageUrl,
-          caption: data.caption,
-          location: data.location,
-          address: data.address,
-          timestamp: data.timestamp,
-          userId: data.userId,
-          userName: data.userName || 'Anonymous User',
-          status: data.status === 'solved' ? 'solved' : 'pending', // Ensure valid status
-          municipalReply: data.municipalReply,
-          deadline: data.deadline,
-          solvedTimestamp: data.solvedTimestamp,
-        });
-      });
+        // Basic validation or transformation if needed
+        postsData = postsData.filter(post => post.id && post.imageUrl && post.caption && post.timestamp && post.userId);
 
-      if (skippedCount > 0) {
-        console.log(`Skipped ${skippedCount} posts due to validation issues.`);
-      }
-      console.log("Processed posts count:", postsData.length);
-      setPosts(postsData);
-      setLoading(false);
-      console.log("Loading state set to false.");
+        // Sort by timestamp descending (most recent first)
+        postsData.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
-    }, (err) => {
-      console.error("Error fetching posts from Firestore: ", err);
-      setError(`Failed to load posts. Check connection/permissions. (Code: ${err.code})`);
-      setLoading(false);
-    });
+        setPosts(postsData);
+        setLoading(false);
+        console.log("Mock posts loaded and processed.");
 
-    // Cleanup subscription on unmount
-    return () => {
-      console.log("Cleaning up Firestore listener.");
-      unsubscribe();
+    } catch (err: any) {
+         console.error("Error loading/processing mock posts: ", err);
+         setError(`Failed to load mock posts. ${err.message}`);
+         setLoading(false);
     }
+
+    // No cleanup needed for listeners as Firebase is removed
   }, []); // Empty dependency array ensures this runs only once on mount
 
   const PostCardSkeleton = () => (
@@ -200,6 +191,9 @@ export default function CitizenHomePage() {
             const formattedDeadline = formatDeadline(post.deadline);
             const relativeDate = formatRelativeDate(post.timestamp);
             const fullDate = formatFullDate(post.timestamp);
+            const deadlineDate = post.deadline ? parseISO(post.deadline) : null;
+            const isOverdue = post.status !== 'solved' && deadlineDate && new Date() > deadlineDate;
+
 
             return (
               <Card key={post.id} className="w-full max-w-xl mx-auto overflow-hidden shadow-md rounded-lg border border-border transition-shadow duration-300 hover:shadow-xl bg-card">
@@ -222,11 +216,11 @@ export default function CitizenHomePage() {
                     </div>
                   </div>
                    {/* Status Icon */}
-                   <div title={post.status === 'solved' ? `Solved ${post.solvedTimestamp ? formatRelativeDate(post.solvedTimestamp) : ''}` : 'Pending'}>
+                   <div title={post.status === 'solved' ? `Solved ${post.solvedTimestamp ? formatRelativeDate(post.solvedTimestamp) : ''}` : (isOverdue ? 'Pending (Overdue)' : 'Pending')}>
                       {post.status === 'solved' ? (
                           <CheckCircle2 className="h-5 w-5 text-green-600" />
                       ) : (
-                          <AlertTriangle className="h-5 w-5 text-orange-500" />
+                          <AlertTriangle className={`h-5 w-5 ${isOverdue ? 'text-red-500' : 'text-orange-500'}`} />
                       )}
                    </div>
                 </CardHeader>
@@ -252,17 +246,17 @@ export default function CitizenHomePage() {
 
                 {/* Post Content & Actions */}
                 <CardContent className="p-3 space-y-2">
-                  {/* Action Icons */}
+                  {/* Action Icons (Mocked Actions) */}
                   <div className="flex items-center space-x-1 -ml-2">
-                    <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-red-500 hover:bg-red-100/50 rounded-full">
+                    <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-red-500 hover:bg-red-100/50 rounded-full" onClick={() => toast({title: "Action not implemented"})}>
                       <Heart className="h-5 w-5" />
                       <span className="sr-only">Like</span>
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-full">
+                    <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-full" onClick={() => toast({title: "Action not implemented"})}>
                       <MessageCircle className="h-5 w-5" />
                       <span className="sr-only">Comment</span>
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-full">
+                    <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-full" onClick={() => toast({title: "Action not implemented"})}>
                       <Send className="h-5 w-5" />
                       <span className="sr-only">Share</span>
                     </Button>
@@ -284,9 +278,9 @@ export default function CitizenHomePage() {
 
                   {/* Deadline */}
                   {formattedDeadline && (
-                    <p className={cn("text-xs font-medium pt-1 flex items-center gap-1", new Date() > (post.deadline?.toDate() ?? new Date()) ? "text-red-600" : "text-muted-foreground")}>
+                    <p className={cn("text-xs font-medium pt-1 flex items-center gap-1", isOverdue ? "text-red-600" : "text-muted-foreground")}>
                       <CalendarDays className="h-3.5 w-3.5 flex-shrink-0" />
-                      <span>Deadline: {formattedDeadline} {new Date() > (post.deadline?.toDate() ?? new Date()) && '(Overdue)'}</span>
+                      <span>Deadline: {formattedDeadline} {isOverdue && '(Overdue)'}</span>
                     </p>
                   )}
 
@@ -315,3 +309,5 @@ export default function CitizenHomePage() {
     </div>
   );
 }
+
+import { toast } from '@/hooks/use-toast'; // Added toast import for mock actions

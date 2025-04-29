@@ -1,57 +1,45 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { auth, db } from '@/lib/firebase/config'; // Import db
-import { doc, getDoc } from 'firebase/firestore'; // Import Firestore functions
-import { signOut, type User } from 'firebase/auth';
+// Removed Firebase imports (auth, db, doc, getDoc, signOut, User)
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { LogOut, User as UserIcon, Phone, Loader2, ShieldCheck, Edit } from 'lucide-react'; // Added ShieldCheck, Edit
+import { LogOut, User as UserIcon, Phone, Loader2, ShieldCheck, Edit, Calendar as CalendarIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
+import { Skeleton } from '@/components/ui/skeleton';
+import { format } from 'date-fns'; // Keep format for mock data
+
+// Mock User Data
+const mockUser = {
+  uid: 'mock_citizen_user_123',
+  displayName: 'Mock Citizen',
+  photoURL: null, // Or a placeholder image URL
+  phoneNumber: '+91 98765 43210',
+};
+
+const mockUserData = {
+  role: 'citizen',
+  createdAt: new Date(Date.now() - 86400000 * 10), // Joined 10 days ago
+};
 
 export default function CitizenProfilePage() {
-  const [user, setUser] = useState<User | null>(null);
-  const [userData, setUserData] = useState<any>(null); // To store Firestore data
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<any>(mockUser); // Use mock user
+  const [userData, setUserData] = useState<any>(mockUserData); // Use mock user data
+  const [loading, setLoading] = useState(false); // Start with loading false in mock mode
   const router = useRouter();
   const { toast } = useToast();
 
-  useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(async (currentUser) => {
-      if (!currentUser) {
-        setLoading(false);
-        router.push('/'); // Redirect to landing if not logged in
-      } else {
-        setUser(currentUser);
-        // Fetch additional user data from Firestore
-        try {
-          const userDocRef = doc(db, 'users', currentUser.uid);
-          const userDocSnap = await getDoc(userDocRef);
-          if (userDocSnap.exists()) {
-            setUserData(userDocSnap.data());
-             console.log("User Firestore data:", userDocSnap.data());
-          } else {
-            console.log("No Firestore document found for this user.");
-            setUserData(null); // Explicitly set to null if no data
-          }
-        } catch (error) {
-          console.error("Error fetching user data from Firestore:", error);
-          toast({ title: "Profile Error", description: "Could not fetch profile details.", variant: "destructive" });
-        } finally {
-          setLoading(false);
-        }
-      }
-    });
-    return () => unsubscribe(); // Cleanup subscription
-  }, [router, toast]);
+  // Removed useEffect for onAuthStateChanged
 
   const handleLogout = async () => {
     setLoading(true); // Show loading on logout button
     try {
-      await signOut(auth);
+      // Simulate logout
+      // await signOut(auth); // Removed Firebase signout
+      console.log("Simulating user logout...");
+      await new Promise(resolve => setTimeout(resolve, 500)); // Simulate delay
       toast({ title: 'Logged Out', description: 'You have been successfully logged out.' });
       router.push('/'); // Redirect to landing page after logout
     } catch (error) {
@@ -59,37 +47,18 @@ export default function CitizenProfilePage() {
       toast({ title: 'Logout Failed', description: 'Could not log you out. Please try again.', variant: 'destructive' });
        setLoading(false); // Hide loading on error
     }
-    // setLoading will implicitly be false after redirect or error handling
+    // No need to set loading to false explicitly if redirecting
   };
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center min-h-[calc(100vh-4rem)]"> {/* Adjust height */}
-          {/* Skeleton Loader for Profile */}
-           <Card className="w-full max-w-md shadow-lg animate-pulse">
-                <CardHeader className="items-center text-center">
-                    <Skeleton className="w-24 h-24 rounded-full mb-4 bg-muted" />
-                    <Skeleton className="h-6 w-3/4 mb-2 bg-muted" />
-                    <Skeleton className="h-4 w-1/2 bg-muted" />
-                </CardHeader>
-                <CardContent className="space-y-4 p-6">
-                    <div className="flex items-center space-x-3 p-3 border rounded-md">
-                        <Skeleton className="h-5 w-5 rounded bg-muted" />
-                        <Skeleton className="h-4 w-full bg-muted" />
-                    </div>
-                     <Skeleton className="h-10 w-full rounded-md bg-muted" />
-                </CardContent>
-            </Card>
-      </div>
-    );
-  }
+  // Removed loading skeleton as we start with mock data ready
+  // if (loading) { ... }
 
   if (!user) {
-    // Should have been redirected by useEffect, but added as a safeguard
+    // This case might not be reached in mock mode unless explicitly set
     return <div className="p-4 text-center text-muted-foreground">Please log in.</div>;
   }
 
-  // Determine role display
+  // Determine role display based on mock data
   const roleDisplay = userData?.role === 'citizen' ? 'Citizen' : userData?.role === 'municipal' ? 'Municipal Authority' : 'User';
   const roleIcon = userData?.role === 'citizen' ? <UserIcon size={16} className="mr-1"/> : <ShieldCheck size={16} className="mr-1"/>;
 
@@ -117,12 +86,12 @@ export default function CitizenProfilePage() {
             <span className="text-foreground truncate">{user.phoneNumber || 'No phone number'}</span>
           </div>
 
-           {/* Add more details if available in Firestore */}
+           {/* Display mock joined date */}
           {userData?.createdAt && (
               <div className="flex items-center space-x-3 p-3 border border-input rounded-md bg-background shadow-sm">
                 <CalendarIcon className="h-5 w-5 text-muted-foreground flex-shrink-0" />
                 <span className="text-foreground text-sm">
-                    Joined: {format(userData.createdAt.toDate(), 'PPP')} {/* Format timestamp */}
+                    Joined: {format(userData.createdAt, 'PPP')} {/* Format timestamp */}
                 </span>
              </div>
           )}
@@ -142,7 +111,3 @@ export default function CitizenProfilePage() {
     </div>
   );
 }
-
-// Added imports for CalendarIcon, format, X
-import { Calendar as CalendarIcon, X } from 'lucide-react';
-import { format } from 'date-fns';
