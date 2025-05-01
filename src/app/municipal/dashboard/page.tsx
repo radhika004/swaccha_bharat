@@ -1,13 +1,14 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
-// Removed Firebase imports (collection, query, where, getCountFromServer, onSnapshot, db)
+import { collection, query, where, onSnapshot, getCountFromServer, db } from '@/lib/firebase/config'; // Import Firestore functions
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { AlertTriangle, CheckCircle2, ListTodo, Loader2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ListTodo } from 'lucide-react'; // Removed Loader2
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, ResponsiveContainer } from 'recharts';
 import { ChartTooltipContent, ChartContainer, ChartTooltip, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
 import type { ChartConfig } from '@/components/ui/chart';
-import { Skeleton } from '@/components/ui/skeleton'; // Keep Skeleton for loading simulation
+import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertTitle } from '@/components/ui/alert';
 
 interface IssueStats {
@@ -16,14 +17,7 @@ interface IssueStats {
   pending: number;
 }
 
-// Mock data for stats
-const mockStats: IssueStats = {
-  total: 54,
-  solved: 35,
-  pending: 19,
-};
-
-// Mock data for chart
+// Mock data for chart (can be replaced with real-time data later if needed)
 const mockChartData = [
   { month: 'Jan', total: 12, solved: 8, pending: 4 },
   { month: 'Feb', total: 19, solved: 10, pending: 9 },
@@ -44,29 +38,63 @@ export default function MunicipalDashboardPage() {
   const [stats, setStats] = useState<IssueStats>({ total: 0, solved: 0, pending: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [chartData, setChartData] = useState(mockChartData); // Use mock data
+  const [chartData, setChartData] = useState(mockChartData); // Keep chart mock for now
 
   useEffect(() => {
     setLoading(true);
     setError(null);
-    console.log("Frontend-only mode: Loading mock dashboard data...");
+    console.log("Setting up real-time Firestore listeners for dashboard stats...");
 
-    // Simulate data fetching delay
-    const timer = setTimeout(() => {
-      try {
-        setStats(mockStats);
-        setChartData(mockChartData); // Already set, but could simulate fetching here
+    if (!db) {
+        setError("Firestore is not initialized. Check Firebase configuration.");
         setLoading(false);
-        console.log("Mock dashboard data loaded.");
-      } catch (err: any) {
-        console.error("Error setting mock data:", err);
-        setError("Failed to load dashboard statistics (mock).");
-        setLoading(false);
-      }
-    }, 1000); // Simulate 1 second delay
+        console.error("Firestore instance (db) is null.");
+        return;
+    }
 
-    // Cleanup timer on component unmount
-    return () => clearTimeout(timer);
+    const postsCollection = collection(db, 'posts');
+
+    // Listener for all posts (for total count)
+    const unsubscribeTotal = onSnapshot(postsCollection, (snapshot) => {
+      console.log(`Total posts snapshot received: ${snapshot.size} docs`);
+      setStats(prevStats => ({ ...prevStats, total: snapshot.size }));
+      setLoading(false); // Set loading false once we get the first total count
+    }, (err) => {
+      console.error("Error fetching total posts count:", err);
+      setError(`Failed to load total issue count: ${err.message}`);
+      setLoading(false);
+    });
+
+    // Listener for solved posts
+    const solvedQuery = query(postsCollection, where('status', '==', 'solved'));
+    const unsubscribeSolved = onSnapshot(solvedQuery, (snapshot) => {
+       console.log(`Solved posts snapshot received: ${snapshot.size} docs`);
+      setStats(prevStats => ({ ...prevStats, solved: snapshot.size }));
+    }, (err) => {
+      console.error("Error fetching solved posts count:", err);
+      setError(`Failed to load solved issue count: ${err.message}`);
+      setLoading(false);
+    });
+
+    // Listener for pending posts
+    const pendingQuery = query(postsCollection, where('status', '==', 'pending'));
+    const unsubscribePending = onSnapshot(pendingQuery, (snapshot) => {
+       console.log(`Pending posts snapshot received: ${snapshot.size} docs`);
+      setStats(prevStats => ({ ...prevStats, pending: snapshot.size }));
+    }, (err) => {
+      console.error("Error fetching pending posts count:", err);
+      setError(`Failed to load pending issue count: ${err.message}`);
+      setLoading(false);
+    });
+
+
+    // Cleanup function to unsubscribe from listeners on component unmount
+    return () => {
+        console.log("Unsubscribing from dashboard listeners...");
+        unsubscribeTotal();
+        unsubscribeSolved();
+        unsubscribePending();
+    };
 
   }, []); // Run effect only once on mount
 
@@ -143,9 +171,9 @@ export default function MunicipalDashboardPage() {
           <CardDescription>Monthly reported vs. solved issues (Mock Data).</CardDescription>
         </CardHeader>
         <CardContent className="pl-2"> {/* Adjust padding for axis labels */}
-          {loading ? (
-             <Skeleton className="h-[300px] w-full bg-muted" />
-          ) : (
+          {/* Display skeleton while chart data is loading (if made real-time later) */}
+          {/* For now, just show the chart directly */}
+          {/* {loading ? ( <Skeleton className="h-[300px] w-full bg-muted" /> ) : ( */}
             <ChartContainer config={chartConfig} className="h-[300px] w-full">
               <ResponsiveContainer>
                 <BarChart data={chartData} margin={{ top: 5, right: 10, left: -15, bottom: 5 }}> {/* Adjusted margins */}
@@ -175,9 +203,11 @@ export default function MunicipalDashboardPage() {
                 </BarChart>
               </ResponsiveContainer>
             </ChartContainer>
-           )}
+           {/* )} */}
         </CardContent>
       </Card>
     </div>
   );
 }
+
+    
