@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, type FormEvent, type ChangeEvent } from 'react';
-// Removed Firebase imports (collection, query, orderBy, onSnapshot, doc, updateDoc, where, Timestamp, serverTimestamp, GeoPoint, db)
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, where, Timestamp, serverTimestamp, deleteDoc, GeoPoint, db } from '@/lib/firebase/config'; // Added deleteDoc
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card';
 import Image from 'next/image';
 import { MapPin, Filter, Loader2, MessageSquare, CheckCircle, Send, AlertCircle, CalendarDays, Clock, Trash2 } from 'lucide-react';
@@ -13,108 +13,61 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import { format, formatDistanceToNow, parseISO } from 'date-fns'; // Added parseISO
+import { format, formatDistanceToNow, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { Label } from '@/components/ui/label'; // Added Label import
 
-interface MockLocation {
-  latitude: number;
-  longitude: number;
-}
-
-// Adjusted MockPost interface to use strings for dates
-interface MockPost {
+// Interface matching Firestore structure
+interface Post {
   id: string;
   imageUrl: string;
   caption: string;
-  location?: MockLocation;
+  location?: GeoPoint; // Firestore GeoPoint
   address?: string;
-  timestamp: string; // ISO String
+  timestamp: Timestamp; // Firestore Timestamp
   userId: string;
   userName?: string;
   status?: 'pending' | 'solved';
+  category: string; // Added category
   municipalReply?: string;
-  deadline?: string; // ISO String
-  solvedTimestamp?: string; // ISO String
+  deadline?: Timestamp; // Firestore Timestamp
+  solvedTimestamp?: Timestamp; // Firestore Timestamp
 }
 
-// Sample Mock Data
-const sampleMockPosts: MockPost[] = [
-  {
-    id: 'mock1',
-    imageUrl: 'https://picsum.photos/600/600?random=1',
-    caption: 'Overflowing bin near the park entrance. Needs immediate attention.',
-    location: { latitude: 19.0760, longitude: 72.8777 },
-    address: 'Near Central Park Entrance, Mock City',
-    timestamp: new Date(Date.now() - 86400000).toISOString(),
-    userId: 'mock_citizen_1',
-    userName: 'Concerned Citizen A',
-    status: 'pending',
-    deadline: new Date(Date.now() + 86400000 * 2).toISOString(),
-  },
-  {
-    id: 'mock3',
-    imageUrl: 'https://picsum.photos/600/600?random=3',
-    caption: 'Street light not working on Elm Street.',
-    address: '456 Elm Street, Mock City',
-    timestamp: new Date(Date.now() - 86400000 * 5).toISOString(),
-    userId: 'mock_citizen_3',
-    userName: 'Resident C',
-    status: 'pending',
-  },
-   {
-    id: 'mock_local_1', // Example from potential localStorage
-    imageUrl: 'https://picsum.photos/600/600?random=4',
-    caption: 'Pothole on Oak Avenue',
-    location: { latitude: 19.0780, longitude: 72.8800 },
-    address: 'Oak Avenue, Mock City',
-    timestamp: new Date(Date.now() - 86400000 * 2).toISOString(),
-    userId: 'mock_citizen_user',
-    userName: 'Citizen User (Mock)',
-    status: 'pending',
-    deadline: new Date(Date.now() + 86400000 * 7).toISOString(),
-  },
-  {
-    id: 'mock2',
-    imageUrl: 'https://picsum.photos/600/600?random=2',
-    caption: 'Drainage blocked on Main Street. Water logging during rains.',
-    address: '123 Main Street, Mock City',
-    timestamp: new Date(Date.now() - 86400000 * 3).toISOString(),
-    userId: 'mock_citizen_2',
-    userName: 'Resident B',
-    status: 'solved',
-    municipalReply: 'The drainage has been cleared by our team.',
-    solvedTimestamp: new Date(Date.now() - 86400000).toISOString(),
-  },
-];
 
+// Helper to convert Firestore Timestamp to Date or return null
+const timestampToDate = (timestamp: Timestamp | undefined): Date | null => {
+    if (!timestamp) return null;
+    try {
+        return timestamp.toDate();
+    } catch (e) {
+        console.error("Error converting Timestamp:", e, timestamp);
+        return null;
+    }
+}
 
-// Helper to parse ISO string and format (handle errors gracefully)
-const parseAndFormatDate = (isoString: string | undefined, formatFn: (date: Date, options?: any) => string, options?: any): string => {
-  if (!isoString) return 'Invalid date';
-  try {
-    const date = parseISO(isoString);
-    return formatFn(date, options);
-  } catch (e) {
-    console.error("Error parsing/formatting date:", e, isoString);
-    return "Error date";
-  }
-};
-
-const formatFullDate = (isoString: string): string => parseAndFormatDate(isoString, (d) => format(d, "MMM d, yyyy, h:mm a"));
-const formatRelativeDate = (isoString: string): string => parseAndFormatDate(isoString, formatDistanceToNow, { addSuffix: true }) || 'a while ago';
-const formatDeadline = (isoString?: string): string | null => {
-     if (!isoString) return null;
-     return parseAndFormatDate(isoString, (d) => format(d, "MMM d, yyyy"));
-};
+// Helper to format Date or return 'N/A'
+const formatDate = (date: Date | null, formatString: string, options?: any): string => {
+    if (!date) return 'N/A';
+    try {
+        return format(date, formatString, options);
+    } catch (e) {
+        console.error("Error formatting date:", e, date);
+        return "Error date";
+    }
+}
+const formatRelativeDate = (date: Date | null): string => formatDate(date, '', { addSuffix: true }) || 'a while ago';
+const formatFullDate = (date: Date | null): string => formatDate(date, "MMM d, yyyy, h:mm a");
+const formatDeadline = (date: Date | null): string => formatDate(date, "MMM d, yyyy");
 
 
 export default function MunicipalIssuesPage() {
-  const [allPosts, setAllPosts] = useState<MockPost[]>([]); // Store all mock posts
-  const [filteredPosts, setFilteredPosts] = useState<MockPost[]>([]); // Posts to display based on filter
+  const [allPosts, setAllPosts] = useState<Post[]>([]); // Store all posts from Firestore
+  const [filteredPosts, setFilteredPosts] = useState<Post[]>([]); // Posts to display based on filter
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'pending' | 'solved' | 'all'>('pending');
-  const [selectedPost, setSelectedPost] = useState<MockPost | null>(null);
+  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [replyText, setReplyText] = useState('');
   const [isReplying, setIsReplying] = useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState<Record<string, boolean>>({});
@@ -122,53 +75,58 @@ export default function MunicipalIssuesPage() {
   const { toast } = useToast();
 
 
-  // Load initial mock data
+  // Load initial data from Firestore
   useEffect(() => {
     setLoading(true);
     setError(null);
-    console.log("Frontend-only mode: Loading initial mock issues...");
+    console.log("Setting up Firestore listener for posts...");
 
-    try {
-        // Try loading from localStorage first (to include posts added via AddPostPage mock)
-        const storedPosts = localStorage.getItem('mockPosts');
-        let combinedPosts: MockPost[] = [];
-
-        if (storedPosts) {
-             try {
-                const parsedStoredPosts = JSON.parse(storedPosts);
-                // Filter out any invalid entries just in case
-                combinedPosts = parsedStoredPosts.filter((p: any) => p.id && p.timestamp);
-                console.log(`Loaded ${combinedPosts.length} mock posts from localStorage.`);
-            } catch (parseError) {
-                console.error("Error parsing localStorage posts:", parseError);
-                // Fallback to sample data if parsing fails
-                 combinedPosts = [...sampleMockPosts];
-                 localStorage.removeItem('mockPosts'); // Clear corrupted data
-            }
-        } else {
-             combinedPosts = [...sampleMockPosts]; // Use sample data if nothing in storage
-        }
-
-         // Ensure sample posts are included if not already present from storage (simple check)
-         sampleMockPosts.forEach(samplePost => {
-            if (!combinedPosts.some(p => p.id === samplePost.id)) {
-                combinedPosts.push(samplePost);
-            }
-         });
-
-        // Sort by timestamp descending
-        combinedPosts.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-
-        setAllPosts(combinedPosts);
-        setLoading(false);
-        console.log("Initial mock issues loaded.");
-
-    } catch (err: any) {
-         console.error("Error loading initial mock issues: ", err);
-         setError(`Failed to load mock issues. ${err.message}`);
-         setLoading(false);
+    if (!db) {
+      setError("Firestore is not initialized. Check Firebase configuration.");
+      setLoading(false);
+      console.error("Firestore instance (db) is null.");
+      return;
     }
-  }, []); // Load only once on mount
+
+    const postsCollection = collection(db, 'posts');
+    // Order by timestamp descending (most recent first)
+    const q = query(postsCollection, orderBy('timestamp', 'desc'));
+
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      console.log(`Firestore snapshot received: ${querySnapshot.size} docs`);
+      const postsData = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      } as Post));
+
+      // Basic validation
+      const validPosts = postsData.filter(post =>
+          post.id &&
+          post.timestamp && // Ensure timestamp exists
+          post.imageUrl &&
+          post.caption &&
+          post.userId &&
+          post.category && // Check for category
+          post.status // Ensure status exists
+      );
+      console.log(`Valid posts after filtering: ${validPosts.length}`);
+
+      setAllPosts(validPosts);
+      setLoading(false);
+      console.log("Posts loaded from Firestore.");
+
+    }, (err) => {
+      console.error("Error fetching posts from Firestore: ", err);
+      setError(`Failed to load issues. Check console for details. (Code: ${err.code})`);
+      setLoading(false);
+    });
+
+    // Cleanup subscription on unmount
+    return () => {
+      console.log("Unsubscribing from Firestore posts listener.");
+      unsubscribe();
+    };
+  }, []); // Run only once on mount
 
   // Apply filter whenever allPosts or filter changes
   useEffect(() => {
@@ -182,7 +140,7 @@ export default function MunicipalIssuesPage() {
   }, [filter, allPosts]); // React to changes in filter or the base data
 
 
-  const handleOpenReplyDialog = (post: MockPost) => {
+  const handleOpenReplyDialog = (post: Post) => {
     setSelectedPost(post);
     setReplyText(post.municipalReply || '');
     setDialogError(null);
@@ -195,48 +153,36 @@ export default function MunicipalIssuesPage() {
     setIsReplying(false);
   };
 
-  // Simulate sending reply and updating status
+  // Send reply and update status in Firestore
   const handleSendReply = async (e: FormEvent) => {
     e.preventDefault();
     if (!selectedPost || !replyText.trim()) {
         setDialogError("Please enter a reply message.");
         return;
     };
+    if (!db || !selectedPost.id) {
+        setDialogError("Database connection or Post ID missing.");
+        return;
+    }
+
     setIsReplying(true);
     setDialogError(null);
-    console.log(`Simulating reply for post ${selectedPost.id}: ${replyText.trim()}`);
+    console.log(`Sending reply for post ${selectedPost.id}: ${replyText.trim()}`);
 
-    // Simulate async operation
-    await new Promise(resolve => setTimeout(resolve, 700));
+    const postDocRef = doc(db, 'posts', selectedPost.id);
 
     try {
-      // Update the state locally
-      setAllPosts(prevPosts =>
-        prevPosts.map(p =>
-          p.id === selectedPost.id
-            ? {
-                ...p,
-                municipalReply: replyText.trim(),
-                status: 'solved',
-                solvedTimestamp: new Date().toISOString()
-              }
-            : p
-        )
-      );
-       // Update localStorage as well (Optional)
-       const updatedLocalStoragePosts = allPosts.map(p =>
-           p.id === selectedPost.id
-            ? { ...p, municipalReply: replyText.trim(), status: 'solved', solvedTimestamp: new Date().toISOString() }
-            : p
-       );
-       localStorage.setItem('mockPosts', JSON.stringify(updatedLocalStoragePosts));
+      await updateDoc(postDocRef, {
+        municipalReply: replyText.trim(),
+        status: 'solved',
+        solvedTimestamp: serverTimestamp() // Use server timestamp
+      });
 
-
-      toast({ title: "Reply Sent (Simulated)", description: "Issue marked as solved." });
+      toast({ title: "Reply Sent", description: "Issue marked as solved." });
       handleCloseReplyDialog();
     } catch (err: any) {
-      console.error("Error simulating reply:", err);
-      const message = `Failed to send reply (simulated): ${err.message}`;
+      console.error("Error sending reply:", err);
+      const message = `Failed to send reply: ${err.message}`;
       setDialogError(message);
       toast({ title: "Reply Error", description: message, variant: "destructive" });
     } finally {
@@ -244,62 +190,53 @@ export default function MunicipalIssuesPage() {
     }
   };
 
-  // Simulate marking as solved
+  // Mark issue as solved in Firestore
   const handleMarkAsSolved = async (postId: string) => {
-    if (!postId) return;
+    if (!postId || !db) {
+        toast({ title: "Error", description: "Post ID or database connection missing.", variant: "destructive"});
+        return;
+    }
     setIsUpdatingStatus(prev => ({ ...prev, [postId]: true }));
-    console.log(`Simulating marking post ${postId} as solved.`);
+    console.log(`Marking post ${postId} as solved.`);
 
-    // Simulate async operation
-    await new Promise(resolve => setTimeout(resolve, 500));
+    const postDocRef = doc(db, 'posts', postId);
 
     try {
-       // Update the state locally
-       setAllPosts(prevPosts =>
-        prevPosts.map(p =>
-          p.id === postId
-            ? { ...p, status: 'solved', solvedTimestamp: new Date().toISOString() }
-            : p
-        )
-       );
-       // Update localStorage as well (Optional)
-        const updatedLocalStoragePosts = allPosts.map(p =>
-           p.id === postId
-            ? { ...p, status: 'solved', solvedTimestamp: new Date().toISOString() }
-            : p
-        );
-       localStorage.setItem('mockPosts', JSON.stringify(updatedLocalStoragePosts));
+       await updateDoc(postDocRef, {
+         status: 'solved',
+         solvedTimestamp: serverTimestamp() // Use server timestamp
+       });
 
-      toast({ title: "Status Updated (Simulated)", description: "Issue marked as solved." });
+      toast({ title: "Status Updated", description: "Issue marked as solved." });
     } catch (err: any) {
-      console.error("Error simulating mark as solved:", err);
-      toast({ title: "Update Error", description: `Failed to update status (simulated): ${err.message}`, variant: "destructive" });
+      console.error("Error marking as solved:", err);
+      toast({ title: "Update Error", description: `Failed to update status: ${err.message}`, variant: "destructive" });
     } finally {
       setIsUpdatingStatus(prev => ({ ...prev, [postId]: false }));
     }
   };
 
-   // Simulate delete
+   // Delete issue from Firestore
    const handleDeleteIssue = async (postId: string) => {
-     console.warn(`Simulating delete for post ${postId}.`);
+      if (!postId || !db) {
+        toast({ title: "Error", description: "Post ID or database connection missing.", variant: "destructive"});
+        return;
+    }
+     console.warn(`Deleting post ${postId}.`);
      setIsUpdatingStatus(prev => ({ ...prev, [postId]: true })); // Use loading state for delete button too
 
-     await new Promise(resolve => setTimeout(resolve, 500)); // Simulate delay
+     const postDocRef = doc(db, 'posts', postId);
 
      try {
-        // Update state
-        setAllPosts(prevPosts => prevPosts.filter(p => p.id !== postId));
-        // Update localStorage (Optional)
-        const updatedLocalStoragePosts = allPosts.filter(p => p.id !== postId);
-        localStorage.setItem('mockPosts', JSON.stringify(updatedLocalStoragePosts));
-
-        toast({ title: "Issue Deleted (Simulated)" });
+        await deleteDoc(postDocRef);
+        toast({ title: "Issue Deleted" });
+        // No need to manually update state, onSnapshot will handle it
      } catch(err: any) {
-        toast({ title: "Deletion Error (Simulated)", description: err.message, variant: "destructive" });
+         console.error("Error deleting issue:", err);
+        toast({ title: "Deletion Error", description: err.message, variant: "destructive" });
      } finally {
         setIsUpdatingStatus(prev => ({ ...prev, [postId]: false }));
      }
-
    };
 
 
@@ -372,15 +309,21 @@ export default function MunicipalIssuesPage() {
             </Card>
         ) : (
           filteredPosts.map((post) => {
-            const formattedDeadline = formatDeadline(post.deadline);
-            const deadlineDate = post.deadline ? parseISO(post.deadline) : null;
+            const postDate = timestampToDate(post.timestamp);
+            const deadlineDate = timestampToDate(post.deadline);
+            const solvedDate = timestampToDate(post.solvedTimestamp);
+            const formattedDeadline = deadlineDate ? formatDeadline(deadlineDate) : 'N/A';
             const isOverdue = post.status === 'pending' && deadlineDate && new Date() > deadlineDate;
+
+            const displayAddress = post.address || (post.location ? `Lat: ${post.location.latitude.toFixed(4)}, Lon: ${post.location.longitude.toFixed(4)}` : 'Not provided');
+            const mapLink = post.location ? `https://www.google.com/maps?q=${post.location.latitude},${post.location.longitude}` : null;
+
 
             return (
               <Card key={post.id} className="w-full overflow-hidden shadow-lg rounded-lg border border-border bg-card">
                  <CardHeader className="p-4 bg-muted/30 border-b">
                     <div className="flex flex-row justify-between items-start gap-4">
-                       {/* Left side: Status & Time */}
+                       {/* Left side: Status, Category & Time */}
                        <div>
                           {post.status === 'solved' ? (
                              <span className="text-xs font-semibold text-green-700 bg-green-100 px-2.5 py-1 rounded-full inline-flex items-center border border-green-200">
@@ -394,8 +337,9 @@ export default function MunicipalIssuesPage() {
                                 {isOverdue ? 'Overdue' : 'Pending'}
                               </span>
                           )}
-                          <p className="text-xs text-muted-foreground mt-1.5" title={formatFullDate(post.timestamp)}>
-                            Reported {formatRelativeDate(post.timestamp)}
+                           <span className="ml-2 text-xs font-medium text-muted-foreground bg-secondary px-2 py-1 rounded border border-border capitalize">{post.category || 'General'}</span>
+                          <p className="text-xs text-muted-foreground mt-1.5" title={formatFullDate(postDate)}>
+                            Reported {formatRelativeDate(postDate)}
                           </p>
                        </div>
                        {/* Right side: User Info */}
@@ -416,6 +360,7 @@ export default function MunicipalIssuesPage() {
                       style={{ objectFit: 'cover' }}
                       sizes="(max-width: 768px) 100vw, 672px"
                        onError={(e) => { (e.target as HTMLImageElement).src = 'https://picsum.photos/600/400?grayscale'; (e.target as HTMLImageElement).alt="Image load error"; }}
+                       data-ai-hint="waste management urban environment"
                     />
                   </div>
                 )}
@@ -426,15 +371,15 @@ export default function MunicipalIssuesPage() {
                   {/* Location */}
                    <div className="flex items-start text-sm text-muted-foreground gap-1.5">
                       <MapPin className="h-4 w-4 mr-0 flex-shrink-0 mt-px text-gray-400" />
-                       <span className="line-clamp-2" title={post.address || (post.location ? `Lat: ${post.location.latitude.toFixed(4)}, Lon: ${post.location.longitude.toFixed(4)}` : 'Not provided')}>
-                          {post.address || (post.location ? `Lat: ${post.location.latitude.toFixed(4)}, Lon: ${post.location.longitude.toFixed(4)}` : 'Location not provided')}
+                       <span className="line-clamp-2" title={displayAddress}>
+                          {displayAddress}
                        </span>
-                       {post.location && (
-                          <a href={`https://www.google.com/maps?q=${post.location.latitude},${post.location.longitude}`} target="_blank" rel="noopener noreferrer" className="ml-1 text-accent hover:underline text-xs flex-shrink-0 whitespace-nowrap">(View Map)</a>
+                       {mapLink && (
+                          <a href={mapLink} target="_blank" rel="noopener noreferrer" className="ml-1 text-accent hover:underline text-xs flex-shrink-0 whitespace-nowrap">(View Map)</a>
                        )}
                   </div>
                   {/* Deadline */}
-                  {formattedDeadline && (
+                  {deadlineDate && (
                       <div className={cn("flex items-center text-sm gap-1.5", isOverdue ? "text-red-600 font-semibold" : "text-muted-foreground")}>
                           <CalendarDays className="h-4 w-4 mr-0 flex-shrink-0" />
                           <span>Deadline: {formattedDeadline} {isOverdue && '(Overdue)'}</span>
@@ -445,14 +390,14 @@ export default function MunicipalIssuesPage() {
                     <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-md">
                       <p className="text-sm font-semibold text-green-800 mb-1">Municipal Response:</p>
                       <p className="text-sm text-green-700 whitespace-pre-wrap break-words">{post.municipalReply}</p>
-                       {post.solvedTimestamp && (
-                          <p className="text-xs text-muted-foreground mt-1.5 italic">Responded: {formatRelativeDate(post.solvedTimestamp)}</p>
+                       {solvedDate && (
+                          <p className="text-xs text-muted-foreground mt-1.5 italic">Responded: {formatRelativeDate(solvedDate)}</p>
                        )}
                     </div>
                   )}
-                   {post.status === 'solved' && !post.municipalReply && post.solvedTimestamp && (
+                   {post.status === 'solved' && !post.municipalReply && solvedDate && (
                       <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
-                         <p className="text-sm text-yellow-700 italic">Marked as solved {formatRelativeDate(post.solvedTimestamp)} without comment.</p>
+                         <p className="text-sm text-yellow-700 italic">Marked as solved {formatRelativeDate(solvedDate)} without comment.</p>
                       </div>
                   )}
                 </CardContent>
@@ -490,10 +435,10 @@ export default function MunicipalIssuesPage() {
                       <MessageSquare className="h-4 w-4 mr-1"/> {post.municipalReply ? 'Edit Reply' : 'Add Reply'}
                     </Button>
                   )}
-                   {/* Delete Button (Simulated) */}
+                   {/* Delete Button */}
                     <AlertDialog>
                        <AlertDialogTrigger asChild>
-                           <Button variant="destructive" size="icon" className="h-9 w-9" title="Delete Issue (Simulated)" disabled={isUpdatingStatus[post.id]}>
+                           <Button variant="destructive" size="icon" className="h-9 w-9" title="Delete Issue" disabled={isUpdatingStatus[post.id]}>
                               {isUpdatingStatus[post.id]? <Loader2 className="h-4 w-4 animate-spin"/> : <Trash2 className="h-4 w-4" />}
                            </Button>
                        </AlertDialogTrigger>
@@ -517,7 +462,7 @@ export default function MunicipalIssuesPage() {
         )}
       </div>
 
-      {/* Reply Dialog (Remains mostly the same, but onSubmit calls simulated function) */}
+      {/* Reply Dialog */}
       <Dialog open={!!selectedPost} onOpenChange={(open) => !open && handleCloseReplyDialog()}>
         <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>
@@ -558,3 +503,5 @@ export default function MunicipalIssuesPage() {
     </div>
   );
 }
+
+    
