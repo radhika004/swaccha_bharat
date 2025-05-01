@@ -1,7 +1,10 @@
+
 'use client';
 
 import React, { useState, useEffect, type FormEvent, type ChangeEvent } from 'react';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc, where, Timestamp, serverTimestamp, deleteDoc, GeoPoint, db } from '@/lib/firebase/config'; // Added deleteDoc
+// Import specific Firestore functions directly
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, where, Timestamp, serverTimestamp, deleteDoc, GeoPoint, getFirestore } from 'firebase/firestore';
+import { db } from '@/lib/firebase/config'; // Import initialized db instance
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card';
 import Image from 'next/image';
 import { MapPin, Filter, Loader2, MessageSquare, CheckCircle, Send, AlertCircle, CalendarDays, Clock, Trash2 } from 'lucide-react';
@@ -94,26 +97,31 @@ export default function MunicipalIssuesPage() {
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       console.log(`Firestore snapshot received: ${querySnapshot.size} docs`);
-      const postsData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Post));
+      try {
+        const postsData = querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        } as Post));
 
-      // Basic validation
-      const validPosts = postsData.filter(post =>
-          post.id &&
-          post.timestamp && // Ensure timestamp exists
-          post.imageUrl &&
-          post.caption &&
-          post.userId &&
-          post.category && // Check for category
-          post.status // Ensure status exists
-      );
-      console.log(`Valid posts after filtering: ${validPosts.length}`);
+        // Basic validation
+        const validPosts = postsData.filter(post =>
+            post.id &&
+            post.timestamp && // Ensure timestamp exists
+            post.imageUrl &&
+            post.caption &&
+            post.userId &&
+            // post.category && // Check for category - Making optional for now if older data exists
+            post.status // Ensure status exists
+        );
+        console.log(`Valid posts after filtering: ${validPosts.length}`);
 
-      setAllPosts(validPosts);
-      setLoading(false);
-      console.log("Posts loaded from Firestore.");
+        setAllPosts(validPosts);
+      } catch (err: any) {
+         console.error("Error processing snapshot data:", err);
+         setError(`Failed to process issue data. ${err.message}`);
+      } finally {
+        setLoading(false); // Set loading false after processing or error
+      }
 
     }, (err) => {
       console.error("Error fetching posts from Firestore: ", err);
@@ -504,4 +512,3 @@ export default function MunicipalIssuesPage() {
   );
 }
 
-    
