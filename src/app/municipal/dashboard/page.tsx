@@ -2,9 +2,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, onSnapshot, getCountFromServer, db } from '@/lib/firebase/config'; // Import Firestore functions
+// Removed Firebase imports (collection, query, where, onSnapshot, getCountFromServer, db)
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { AlertTriangle, CheckCircle2, ListTodo } from 'lucide-react'; // Removed Loader2
+import { AlertTriangle, CheckCircle2, ListTodo, Loader2 } from 'lucide-react'; // Added Loader2 back
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, ResponsiveContainer } from 'recharts';
 import { ChartTooltipContent, ChartContainer, ChartTooltip, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
 import type { ChartConfig } from '@/components/ui/chart';
@@ -17,7 +17,14 @@ interface IssueStats {
   pending: number;
 }
 
-// Mock data for chart (can be replaced with real-time data later if needed)
+// Mock data for stats
+const mockStats: IssueStats = {
+  total: 45,
+  solved: 28,
+  pending: 17,
+};
+
+// Mock data for chart
 const mockChartData = [
   { month: 'Jan', total: 12, solved: 8, pending: 4 },
   { month: 'Feb', total: 19, solved: 10, pending: 9 },
@@ -35,66 +42,30 @@ const chartConfig = {
 } satisfies ChartConfig;
 
 export default function MunicipalDashboardPage() {
-  const [stats, setStats] = useState<IssueStats>({ total: 0, solved: 0, pending: 0 });
+  const [stats, setStats] = useState<IssueStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [chartData, setChartData] = useState(mockChartData); // Keep chart mock for now
+  const [chartData, setChartData] = useState(mockChartData);
 
   useEffect(() => {
     setLoading(true);
     setError(null);
-    console.log("Setting up real-time Firestore listeners for dashboard stats...");
+    console.log("Frontend-only mode: Simulating loading dashboard stats...");
 
-    if (!db) {
-        setError("Firestore is not initialized. Check Firebase configuration.");
+    // Simulate fetching data
+    const timer = setTimeout(() => {
+      try {
+        setStats(mockStats);
+        console.log("Mock stats loaded.");
+      } catch (err: any) {
+        console.error("Error setting mock stats:", err);
+        setError(`Failed to load dashboard stats (mock): ${err.message}`);
+      } finally {
         setLoading(false);
-        console.error("Firestore instance (db) is null.");
-        return;
-    }
+      }
+    }, 1000); // Simulate network delay
 
-    const postsCollection = collection(db, 'posts');
-
-    // Listener for all posts (for total count)
-    const unsubscribeTotal = onSnapshot(postsCollection, (snapshot) => {
-      console.log(`Total posts snapshot received: ${snapshot.size} docs`);
-      setStats(prevStats => ({ ...prevStats, total: snapshot.size }));
-      setLoading(false); // Set loading false once we get the first total count
-    }, (err) => {
-      console.error("Error fetching total posts count:", err);
-      setError(`Failed to load total issue count: ${err.message}`);
-      setLoading(false);
-    });
-
-    // Listener for solved posts
-    const solvedQuery = query(postsCollection, where('status', '==', 'solved'));
-    const unsubscribeSolved = onSnapshot(solvedQuery, (snapshot) => {
-       console.log(`Solved posts snapshot received: ${snapshot.size} docs`);
-      setStats(prevStats => ({ ...prevStats, solved: snapshot.size }));
-    }, (err) => {
-      console.error("Error fetching solved posts count:", err);
-      setError(`Failed to load solved issue count: ${err.message}`);
-      setLoading(false);
-    });
-
-    // Listener for pending posts
-    const pendingQuery = query(postsCollection, where('status', '==', 'pending'));
-    const unsubscribePending = onSnapshot(pendingQuery, (snapshot) => {
-       console.log(`Pending posts snapshot received: ${snapshot.size} docs`);
-      setStats(prevStats => ({ ...prevStats, pending: snapshot.size }));
-    }, (err) => {
-      console.error("Error fetching pending posts count:", err);
-      setError(`Failed to load pending issue count: ${err.message}`);
-      setLoading(false);
-    });
-
-
-    // Cleanup function to unsubscribe from listeners on component unmount
-    return () => {
-        console.log("Unsubscribing from dashboard listeners...");
-        unsubscribeTotal();
-        unsubscribeSolved();
-        unsubscribePending();
-    };
+    return () => clearTimeout(timer); // Cleanup timer
 
   }, []); // Run effect only once on mount
 
@@ -120,10 +91,10 @@ export default function MunicipalDashboardPage() {
             <ListTodo className="h-5 w-5 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {loading ? (
+            {loading || stats === null ? (
               <Skeleton className="h-8 w-20 bg-muted" />
             ) : (
-              <div className="text-3xl font-bold text-primary">{stats.total ?? 0}</div>
+              <div className="text-3xl font-bold text-primary">{stats.total}</div>
             )}
             <p className="text-xs text-muted-foreground pt-1">Total issues reported</p>
           </CardContent>
@@ -136,13 +107,13 @@ export default function MunicipalDashboardPage() {
             <CheckCircle2 className="h-5 w-5 text-green-500" />
           </CardHeader>
           <CardContent>
-            {loading ? (
+            {loading || stats === null ? (
               <Skeleton className="h-8 w-16 bg-muted" />
             ) : (
-              <div className="text-3xl font-bold text-green-600">{stats.solved ?? 0}</div>
+              <div className="text-3xl font-bold text-green-600">{stats.solved}</div>
             )}
             <p className="text-xs text-muted-foreground pt-1">
-              {stats.total > 0 ? `${((stats.solved / stats.total) * 100 || 0).toFixed(1)}% resolved` : '0% resolved'}
+              {stats && stats.total > 0 ? `${((stats.solved / stats.total) * 100 || 0).toFixed(1)}% resolved` : '0% resolved'}
             </p>
           </CardContent>
         </Card>
@@ -154,10 +125,10 @@ export default function MunicipalDashboardPage() {
             <AlertTriangle className="h-5 w-5 text-orange-500" />
           </CardHeader>
           <CardContent>
-            {loading ? (
+            {loading || stats === null ? (
                <Skeleton className="h-8 w-16 bg-muted" />
             ) : (
-              <div className="text-3xl font-bold text-orange-600">{stats.pending ?? 0}</div>
+              <div className="text-3xl font-bold text-orange-600">{stats.pending}</div>
             )}
             <p className="text-xs text-muted-foreground pt-1">Issues requiring action</p>
           </CardContent>
@@ -171,9 +142,7 @@ export default function MunicipalDashboardPage() {
           <CardDescription>Monthly reported vs. solved issues (Mock Data).</CardDescription>
         </CardHeader>
         <CardContent className="pl-2"> {/* Adjust padding for axis labels */}
-          {/* Display skeleton while chart data is loading (if made real-time later) */}
-          {/* For now, just show the chart directly */}
-          {/* {loading ? ( <Skeleton className="h-[300px] w-full bg-muted" /> ) : ( */}
+          {loading ? ( <Skeleton className="h-[300px] w-full bg-muted" /> ) : (
             <ChartContainer config={chartConfig} className="h-[300px] w-full">
               <ResponsiveContainer>
                 <BarChart data={chartData} margin={{ top: 5, right: 10, left: -15, bottom: 5 }}> {/* Adjusted margins */}
@@ -203,11 +172,9 @@ export default function MunicipalDashboardPage() {
                 </BarChart>
               </ResponsiveContainer>
             </ChartContainer>
-           {/* )} */}
+           )}
         </CardContent>
       </Card>
     </div>
   );
 }
-
-    

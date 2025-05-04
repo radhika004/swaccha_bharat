@@ -1,17 +1,19 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
-// Removed Firebase imports (collection, query, orderBy, onSnapshot, Timestamp, GeoPoint, db)
+// Removed Firebase imports
 import { Card, CardContent, CardHeader, CardFooter } from '@/components/ui/card';
 import Image from 'next/image';
-import { MapPin, User, Clock, CalendarDays, Heart, MessageCircle, Send, CheckCircle2, AlertTriangle, CircleEllipsis } from 'lucide-react';
+import { MapPin, User, Clock, CalendarDays, Heart, MessageCircle, Send, CheckCircle2, AlertTriangle, CircleEllipsis, Tag } from 'lucide-react'; // Added Tag icon
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { formatDistanceToNow, parseISO } from 'date-fns'; // Added parseISO
+import { formatDistanceToNow, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast'; // Added toast import for mock actions
 
 interface MockLocation {
   latitude: number;
@@ -22,15 +24,16 @@ interface MockPost {
   id: string;
   imageUrl: string;
   caption: string;
-  location?: MockLocation; // Use simple object for mock
+  category: string; // Added category
+  location?: MockLocation;
   address?: string;
-  timestamp: string; // Use ISO string for mock
+  timestamp: string; // ISO string
   userId: string;
   userName?: string;
   status?: 'pending' | 'solved';
   municipalReply?: string;
-  deadline?: string; // Use ISO string for mock
-  solvedTimestamp?: string; // Use ISO string for mock
+  deadline?: string; // ISO string
+  solvedTimestamp?: string; // ISO string
 }
 
 // Sample Mock Data (if localStorage is empty)
@@ -39,7 +42,8 @@ const sampleMockPosts: MockPost[] = [
     id: 'mock1',
     imageUrl: 'https://picsum.photos/600/600?random=1',
     caption: 'Overflowing bin near the park entrance. Needs immediate attention.',
-    location: { latitude: 19.0760, longitude: 72.8777 }, // Mock Mumbai coords
+    category: 'garbage',
+    location: { latitude: 19.0760, longitude: 72.8777 },
     address: 'Near Central Park Entrance, Mock City',
     timestamp: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
     userId: 'mock_citizen_1',
@@ -51,6 +55,7 @@ const sampleMockPosts: MockPost[] = [
     id: 'mock2',
     imageUrl: 'https://picsum.photos/600/600?random=2',
     caption: 'Drainage blocked on Main Street. Water logging during rains.',
+    category: 'drainage',
     address: '123 Main Street, Mock City',
     timestamp: new Date(Date.now() - 86400000 * 3).toISOString(), // 3 days ago
     userId: 'mock_citizen_2',
@@ -89,6 +94,7 @@ export default function CitizenHomePage() {
   const [posts, setPosts] = useState<MockPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { toast } = useToast(); // Initialize toast
 
   useEffect(() => {
     console.log("Frontend-only mode: Loading mock posts...");
@@ -105,23 +111,33 @@ export default function CitizenHomePage() {
             console.log(`Loaded ${postsData.length} mock posts from localStorage.`);
         } else {
             postsData = sampleMockPosts; // Use sample data if nothing in storage
-            console.log("Using sample mock posts as localStorage is empty.");
+            localStorage.setItem('mockPosts', JSON.stringify(sampleMockPosts)); // Pre-populate storage
+            console.log("Using sample mock posts and saving to localStorage.");
         }
 
         // Basic validation or transformation if needed
-        postsData = postsData.filter(post => post.id && post.imageUrl && post.caption && post.timestamp && post.userId);
+        postsData = postsData.filter(post =>
+            post.id &&
+            post.imageUrl &&
+            post.caption &&
+            post.category && // Check for category
+            post.timestamp &&
+            post.userId &&
+            post.status // Ensure status exists
+        );
 
         // Sort by timestamp descending (most recent first)
         postsData.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
         setPosts(postsData);
-        setLoading(false);
-        console.log("Mock posts loaded and processed.");
+        console.log("Mock posts loaded, validated, and processed.");
 
     } catch (err: any) {
          console.error("Error loading/processing mock posts: ", err);
          setError(`Failed to load mock posts. ${err.message}`);
-         setLoading(false);
+    } finally {
+        // Simulate loading time even if from localStorage
+        setTimeout(() => setLoading(false), 300);
     }
 
     // No cleanup needed for listeners as Firebase is removed
@@ -236,6 +252,7 @@ export default function CitizenHomePage() {
                       priority={index < 2} // Prioritize first 2 images
                       sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 672px" // Optimized sizes
                       onError={(e) => { (e.target as HTMLImageElement).src = 'https://picsum.photos/600/600?grayscale'; (e.target as HTMLImageElement).alt="Image load error"; }} // Fallback image
+                      data-ai-hint="waste management urban environment" // Added AI hint
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-muted-foreground bg-gray-200">
@@ -267,6 +284,12 @@ export default function CitizenHomePage() {
                     <span className="font-semibold mr-1">{post.userName || 'User'}</span>
                     <span className="whitespace-pre-wrap break-words">{post.caption || '(No caption provided)'}</span>
                   </p>
+
+                   {/* Category */}
+                   <p className="text-xs text-muted-foreground pt-1 flex items-center gap-1 capitalize">
+                      <Tag className="h-3.5 w-3.5 flex-shrink-0" />
+                      Category: {post.category || 'General'}
+                   </p>
 
                   {/* Full Address (if available and different from header) */}
                   {post.address && (
@@ -309,5 +332,3 @@ export default function CitizenHomePage() {
     </div>
   );
 }
-
-import { toast } from '@/hooks/use-toast'; // Added toast import for mock actions

@@ -1,7 +1,8 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
-// Removed Firebase imports (auth, db, doc, getDoc, signOut, User)
+// Removed Firebase imports (auth, db, doc, getDoc, signOut, User, onAuthStateChanged)
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -9,7 +10,10 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { LogOut, User as UserIcon, Phone, Loader2, ShieldCheck, Edit, Calendar as CalendarIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
-import { format } from 'date-fns'; // Keep format for mock data
+import { format } from 'date-fns';
+import { Label } from "@/components/ui/label"; // Import Label
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"; // Import Select components
+
 
 // Mock User Data
 const mockUser = {
@@ -24,10 +28,28 @@ const mockUserData = {
   createdAt: new Date(Date.now() - 86400000 * 10), // Joined 10 days ago
 };
 
+// List of Indian languages for the dropdown
+const indianLanguages = [
+  { code: 'en', name: 'English' },
+  { code: 'hi', name: 'Hindi (हिन्दी)' },
+  { code: 'bn', name: 'Bengali (বাংলা)' },
+  { code: 'te', name: 'Telugu (తెలుగు)' },
+  { code: 'mr', name: 'Marathi (मराठी)' },
+  { code: 'ta', name: 'Tamil (தமிழ்)' },
+  { code: 'ur', name: 'Urdu (اردو)' },
+  { code: 'gu', name: 'Gujarati (ગુજરાતી)' },
+  { code: 'kn', name: 'Kannada (ಕನ್ನಡ)' },
+  { code: 'or', name: 'Odia (ଓଡ଼ିଆ)' },
+  { code: 'ml', name: 'Malayalam (മലയാളം)' },
+  { code: 'pa', name: 'Punjabi (ਪੰਜਾਬੀ)' },
+  { code: 'as', name: 'Assamese (অসমীয়া)' },
+];
+
 export default function CitizenProfilePage() {
   const [user, setUser] = useState<any>(mockUser); // Use mock user
   const [userData, setUserData] = useState<any>(mockUserData); // Use mock user data
   const [loading, setLoading] = useState(false); // Start with loading false in mock mode
+  const [selectedLanguage, setSelectedLanguage] = useState<string>('en'); // Default to English
   const router = useRouter();
   const { toast } = useToast();
 
@@ -50,8 +72,18 @@ export default function CitizenProfilePage() {
     // No need to set loading to false explicitly if redirecting
   };
 
+  const handleLanguageChange = (newLang: string) => {
+     setSelectedLanguage(newLang);
+     // Here you would typically implement logic to change the app's language.
+     // This might involve:
+     // 1. Updating a global state (e.g., using Context API or Zustand).
+     // 2. Using an internationalization (i18n) library like `react-i18next` or `next-intl`.
+     // 3. Storing the preference (e.g., in localStorage).
+     console.log(`Frontend-only: Language preference changed to ${newLang}. App restart or i18n library needed for actual language switch.`);
+     toast({ title: 'Language Changed (Simulated)', description: `Preferred language set to ${indianLanguages.find(l => l.code === newLang)?.name}. Full app translation requires an i18n setup.` });
+  };
+
   // Removed loading skeleton as we start with mock data ready
-  // if (loading) { ... }
 
   if (!user) {
     // This case might not be reached in mock mode unless explicitly set
@@ -95,6 +127,24 @@ export default function CitizenProfilePage() {
                 </span>
              </div>
           )}
+
+           {/* Language Preference */}
+           <div>
+             <Label htmlFor="language-select" className="font-medium text-gray-700 mb-1 block">Language Preference</Label>
+             <Select value={selectedLanguage} onValueChange={handleLanguageChange}>
+                <SelectTrigger id="language-select" className="w-full shadow-sm">
+                 <SelectValue placeholder="Select Language" />
+               </SelectTrigger>
+                <SelectContent>
+                 {indianLanguages.map((lang) => (
+                   <SelectItem key={lang.code} value={lang.code}>
+                     {lang.name}
+                   </SelectItem>
+                 ))}
+               </SelectContent>
+             </Select>
+           </div>
+
 
            {/* Edit Profile Button (Placeholder) */}
            <Button variant="outline" className="w-full text-accent border-accent hover:bg-accent/10" disabled>

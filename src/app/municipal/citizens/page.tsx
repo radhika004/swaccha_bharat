@@ -1,7 +1,8 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
-// Removed Firebase imports (collection, getDocs, query, orderBy, where, db, Timestamp)
+// Removed Firebase imports
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -9,7 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { User as UserIcon, Phone, CalendarDays, Trash2, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { format, parseISO } from 'date-fns'; // Added parseISO
+import { format, parseISO } from 'date-fns';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -24,6 +25,7 @@ interface CitizenUser {
   role?: string; // Should be 'citizen'
   createdAt?: string; // ISO String for mock data
   name?: string;
+  avatarUrl?: string; // Optional avatar URL
 }
 
 // Sample Mock Citizen Data
@@ -112,19 +114,25 @@ export default function MunicipalCitizensPage() {
   // Mock delete functionality (shows toast, doesn't actually delete)
   const handleDeleteCitizen = async (userId: string) => {
      console.warn(`Simulating delete for user ${userId}.`);
-     toast({ title: "Delete Disabled", description: "This action is disabled in frontend-only mode.", variant: "destructive" });
      // In a real scenario, this would involve backend calls.
-     // For mock: Optionally filter out the user from the local state for demo purposes
-     // setCitizens(prev => prev.filter(c => c.id !== userId));
+     // For mock: Filter out the user from the local state for demo purposes
+     setCitizens(prev => prev.filter(c => c.id !== userId));
+     toast({ title: "Citizen Removed (Simulated)", description: `User ${userId.substring(0,6)}... removed from the list.`, variant: "default" });
+     // Note: This deletion won't persist without backend/localStorage update
   };
 
   const CitizenRowSkeleton = () => (
     <TableRow>
-      <TableCell><Skeleton className="h-4 w-32" /></TableCell> {/* ID */}
-      <TableCell><Skeleton className="h-4 w-24" /></TableCell> {/* Name */}
-      <TableCell><Skeleton className="h-4 w-32" /></TableCell> {/* Phone */}
-      <TableCell><Skeleton className="h-4 w-24" /></TableCell> {/* Registered */}
-      <TableCell><Skeleton className="h-9 w-9 rounded-md" /></TableCell> {/* Actions */}
+      <TableCell><Skeleton className="h-4 w-32 bg-muted" /></TableCell> {/* ID */}
+      <TableCell>
+         <div className="flex items-center gap-2">
+           <Skeleton className="h-8 w-8 rounded-full bg-muted" />
+           <Skeleton className="h-4 w-24 bg-muted" />
+         </div>
+      </TableCell> {/* Name + Avatar */}
+      <TableCell><Skeleton className="h-4 w-32 bg-muted" /></TableCell> {/* Phone */}
+      <TableCell><Skeleton className="h-4 w-24 bg-muted" /></TableCell> {/* Registered */}
+      <TableCell><Skeleton className="h-9 w-9 rounded-md bg-muted" /></TableCell> {/* Actions */}
     </TableRow>
   );
 
@@ -191,14 +199,16 @@ export default function MunicipalCitizensPage() {
                        <TableCell>
                           <div className="flex items-center gap-2">
                             <Avatar className="h-8 w-8 border">
-                                {/* <AvatarImage src={citizen.avatarUrl} /> Placeholder */}
-                                <AvatarFallback className='text-xs'><UserIcon size={14} /></AvatarFallback>
+                                <AvatarImage src={citizen.avatarUrl} alt={citizen.name || 'Citizen'}/>
+                                <AvatarFallback className='text-xs bg-secondary'>
+                                  {citizen.name ? citizen.name.charAt(0).toUpperCase() : <UserIcon size={14} />}
+                                </AvatarFallback>
                             </Avatar>
                             <span className="font-medium">{citizen.name || 'N/A'}</span>
                           </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1 text-sm">
                           <Phone className="h-4 w-4 text-muted-foreground" />
                           {citizen.phoneNumber || 'N/A'}
                         </div>
@@ -210,23 +220,23 @@ export default function MunicipalCitizensPage() {
                          </div>
                       </TableCell>
                       <TableCell className="text-right">
-                         {/* Delete Citizen Button (Disabled) */}
+                         {/* Delete Citizen Button */}
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10" title="Delete Citizen (Disabled)">
+                              <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10" title="Delete Citizen">
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
                               <AlertDialogHeader>
-                                <AlertDialogTitle>Confirm Deletion (Disabled)</AlertDialogTitle>
+                                <AlertDialogTitle>Confirm Removal</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  This action is disabled in the frontend-only version. Deleting users requires backend integration.
+                                  Are you sure you want to remove this citizen from the list? This action is for demonstration purposes only in frontend mode.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
                                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                {/* The actual action button is removed/disabled */}
+                                <AlertDialogAction onClick={() => handleDeleteCitizen(citizen.id)} className="bg-destructive hover:bg-destructive/90">Remove Citizen</AlertDialogAction>
                               </AlertDialogFooter>
                             </AlertDialogContent>
                           </AlertDialog>

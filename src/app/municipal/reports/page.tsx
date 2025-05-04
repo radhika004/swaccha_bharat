@@ -1,23 +1,25 @@
+
 'use client';
 
-import React, { useState } from 'react';
-// Removed Firebase imports (collection, query, where, getDocs, orderBy, Timestamp, db)
+import React, { useState, useEffect } from 'react';
+// Removed Firebase imports
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Calendar as CalendarIcon, Download, Loader2, AlertCircle, FileText, Search } from 'lucide-react';
-import { format, parseISO, isWithinInterval } from 'date-fns'; // Added parseISO, isWithinInterval
+import { Calendar as CalendarIcon, Download, Loader2, AlertCircle, FileText, Search, Tag } from 'lucide-react'; // Added Tag
+import { format, parseISO, isWithinInterval } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 
-// Reusing MockPost interface from issues page, ensure consistency
+// Reusing MockPost interface, ensure consistency
 interface MockPost {
   id: string;
-  imageUrl?: string; // Optional for report
+  imageUrl?: string;
   caption: string;
+  category: string; // Added category
   address?: string;
   status: 'pending' | 'solved';
   timestamp: string; // ISO String
@@ -25,6 +27,7 @@ interface MockPost {
   municipalReply?: string;
   userName?: string;
   userId: string;
+  solvedTimestamp?: string; // ISO string for solved date
 }
 
 // Use the same sample data as issues page for consistency
@@ -33,6 +36,7 @@ const allMockPosts: MockPost[] = [
     id: 'mock1',
     imageUrl: 'https://picsum.photos/600/600?random=1',
     caption: 'Overflowing bin near the park entrance. Needs immediate attention.',
+    category: 'garbage',
     address: 'Near Central Park Entrance, Mock City',
     timestamp: new Date(Date.now() - 86400000 * 1).toISOString(), // 1 day ago
     userId: 'mock_citizen_1',
@@ -44,6 +48,7 @@ const allMockPosts: MockPost[] = [
     id: 'mock3',
     imageUrl: 'https://picsum.photos/600/600?random=3',
     caption: 'Street light not working on Elm Street.',
+    category: 'streetlights',
     address: '456 Elm Street, Mock City',
     timestamp: new Date(Date.now() - 86400000 * 5).toISOString(), // 5 days ago
     userId: 'mock_citizen_3',
@@ -54,6 +59,7 @@ const allMockPosts: MockPost[] = [
     id: 'mock_local_1',
     imageUrl: 'https://picsum.photos/600/600?random=4',
     caption: 'Pothole on Oak Avenue',
+    category: 'potholes',
     address: 'Oak Avenue, Mock City',
     timestamp: new Date(Date.now() - 86400000 * 2).toISOString(), // 2 days ago
     userId: 'mock_citizen_user',
@@ -65,6 +71,7 @@ const allMockPosts: MockPost[] = [
     id: 'mock2',
     imageUrl: 'https://picsum.photos/600/600?random=2',
     caption: 'Drainage blocked on Main Street. Water logging during rains.',
+    category: 'drainage',
     address: '123 Main Street, Mock City',
     timestamp: new Date(Date.now() - 86400000 * 3).toISOString(), // 3 days ago
     userId: 'mock_citizen_2',
@@ -73,11 +80,11 @@ const allMockPosts: MockPost[] = [
     municipalReply: 'The drainage has been cleared by our team.',
     solvedTimestamp: new Date(Date.now() - 86400000).toISOString(),
   },
-    // Add more mock posts spanning different dates if needed
      {
     id: 'mock4_older',
     imageUrl: 'https://picsum.photos/600/600?random=5',
     caption: 'Broken pavement causing hazard.',
+    category: 'other',
     address: 'Maple Lane',
     timestamp: new Date(Date.now() - 86400000 * 15).toISOString(), // 15 days ago
     userId: 'mock_citizen_4',
@@ -96,6 +103,31 @@ export default function MunicipalReportsPage() {
   const [error, setError] = useState<string | null>(null);
   const [reportGenerated, setReportGenerated] = useState(false);
   const { toast } = useToast();
+  const [baseData, setBaseData] = useState<MockPost[]>([]); // To store data loaded from storage
+
+  // Load base data from localStorage on mount
+   useEffect(() => {
+    console.log("Frontend-only: Loading base mock data for reports...");
+    try {
+        const storedPosts = localStorage.getItem('mockPosts');
+        let postsData: MockPost[];
+        if (storedPosts) {
+            postsData = JSON.parse(storedPosts);
+            console.log(`Loaded ${postsData.length} base mock posts from localStorage.`);
+        } else {
+            postsData = allMockPosts; // Fallback to sample data
+             console.log("Using sample mock posts as base data (localStorage empty).");
+        }
+        // Basic validation
+         postsData = postsData.filter(post => post.id && post.timestamp && post.category && post.status);
+         setBaseData(postsData);
+    } catch (err: any) {
+         console.error("Error loading base mock data:", err);
+         setError(`Failed to load base data: ${err.message}`);
+         toast({ title: "Data Load Error", description: "Could not load base issue data.", variant: "destructive"});
+    }
+   }, []);
+
 
    // Helper function to safely format dates, returning 'N/A' or empty string on error/undefined
    const safeFormat = (dateString: string | undefined, formatString: string): string => {
@@ -133,8 +165,8 @@ export default function MunicipalReportsPage() {
       const adjustedEndDate = new Date(endDate);
       adjustedEndDate.setHours(23, 59, 59, 999); // Include the whole end day
 
-      // Filter mock data based on the selected date range
-      const filteredData = allMockPosts.filter(post => {
+      // Filter the base data (loaded from storage)
+      const filteredData = baseData.filter(post => {
         try {
            const postDate = parseISO(post.timestamp);
            return isWithinInterval(postDate, { start: startDate, end: adjustedEndDate });
@@ -173,17 +205,19 @@ export default function MunicipalReportsPage() {
 
     console.log("Simulating CSV download...");
 
-    const headers = ['ID', 'Reported Date', 'Reported By', 'Status', 'Caption', 'Address', 'Deadline', 'Municipal Reply'];
+    const headers = ['ID', 'Reported Date', 'Category', 'Reported By', 'Status', 'Caption', 'Address', 'Deadline', 'Solved Date', 'Municipal Reply'];
     const csvRows = [
       headers.join(','),
       ...reportData.map(row => [
         `"${row.id}"`,
         `"${safeFormat(row.timestamp, 'yyyy-MM-dd HH:mm')}"`,
+        `"${row.category?.replace(/"/g, '""') || 'N/A'}"`,
         `"${row.userName?.replace(/"/g, '""') || 'N/A'}"`,
         `"${row.status}"`,
         `"${row.caption.replace(/"/g, '""')}"`,
         `"${row.address?.replace(/"/g, '""') || 'N/A'}"`,
-        `"${safeFormat(row.deadline, 'yyyy-MM-dd')}"`, // Use safe format
+        `"${safeFormat(row.deadline, 'yyyy-MM-dd')}"`,
+        `"${safeFormat(row.solvedTimestamp, 'yyyy-MM-dd HH:mm')}"`, // Added Solved Date
         `"${row.municipalReply?.replace(/"/g, '""') || ''}"`
       ].join(','))
     ];
@@ -212,7 +246,7 @@ export default function MunicipalReportsPage() {
 
   return (
     <div className="container mx-auto px-4 py-6 space-y-6">
-      <h1 className="text-2xl sm:text-3xl font-bold text-primary">Generate Reports</h1>
+      <h1 className="text-2xl sm:text-3xl font-bold text-primary">Generate Reports (Mock)</h1>
 
       <Card className="shadow-lg border border-primary/10">
         <CardHeader>
@@ -312,11 +346,13 @@ export default function MunicipalReportsPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Reported Date</TableHead>
+                      <TableHead>Category</TableHead>
                       <TableHead>Reported By</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Caption</TableHead>
                       <TableHead>Address</TableHead>
                       <TableHead>Deadline</TableHead>
+                      <TableHead>Solved Date</TableHead>
                       <TableHead>Reply</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -324,9 +360,10 @@ export default function MunicipalReportsPage() {
                     {reportData.map((item) => (
                       <TableRow key={item.id}>
                         <TableCell className="whitespace-nowrap">{safeFormat(item.timestamp, "PP p")}</TableCell>
-                        <TableCell className="whitespace-nowrap">{item.userName}</TableCell>
+                        <TableCell className="capitalize">{item.category}</TableCell>
+                        <TableCell className="whitespace-nowrap">{item.userName || 'N/A'}</TableCell>
                         <TableCell>
-                          <span className={cn("px-2 py-0.5 rounded-full text-xs font-medium border",
+                          <span className={cn("px-2 py-0.5 rounded-full text-xs font-medium border capitalize",
                             item.status === 'solved' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-orange-100 text-orange-700 border-orange-200'
                           )}>
                             {item.status}
@@ -335,6 +372,7 @@ export default function MunicipalReportsPage() {
                         <TableCell className="max-w-[200px] truncate" title={item.caption}>{item.caption}</TableCell>
                         <TableCell className="max-w-[250px] truncate" title={item.address}>{item.address || 'N/A'}</TableCell>
                         <TableCell className="whitespace-nowrap">{safeFormat(item.deadline, "PP")}</TableCell>
+                         <TableCell className="whitespace-nowrap">{safeFormat(item.solvedTimestamp, "PP p")}</TableCell> {/* Added Solved Date */}
                         <TableCell className="max-w-[200px] truncate" title={item.municipalReply}>{item.municipalReply || ''}</TableCell>
                       </TableRow>
                     ))}

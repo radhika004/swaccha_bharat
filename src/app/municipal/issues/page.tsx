@@ -2,12 +2,10 @@
 'use client';
 
 import React, { useState, useEffect, type FormEvent, type ChangeEvent } from 'react';
-// Import specific Firestore functions directly
-import { collection, query, orderBy, onSnapshot, doc, updateDoc, where, Timestamp, serverTimestamp, deleteDoc, GeoPoint, getFirestore } from 'firebase/firestore';
-import { db } from '@/lib/firebase/config'; // Import initialized db instance
+// Removed Firebase imports
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card';
 import Image from 'next/image';
-import { MapPin, Filter, Loader2, MessageSquare, CheckCircle, Send, AlertCircle, CalendarDays, Clock, Trash2 } from 'lucide-react';
+import { MapPin, Filter, Loader2, MessageSquare, CheckCircle, Send, AlertCircle, CalendarDays, Clock, Trash2, Tag } from 'lucide-react'; // Added Tag
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -18,59 +16,97 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { format, formatDistanceToNow, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { Label } from '@/components/ui/label'; // Added Label import
+import { Label } from '@/components/ui/label';
 
-// Interface matching Firestore structure
-interface Post {
+// Interface matching mock data structure
+interface MockPost {
   id: string;
   imageUrl: string;
   caption: string;
-  location?: GeoPoint; // Firestore GeoPoint
+  category: string; // Added category
+  location?: { latitude: number; longitude: number }; // Simple object
   address?: string;
-  timestamp: Timestamp; // Firestore Timestamp
+  timestamp: string; // ISO String
   userId: string;
   userName?: string;
-  status?: 'pending' | 'solved';
-  category: string; // Added category
+  status: 'pending' | 'solved';
   municipalReply?: string;
-  deadline?: Timestamp; // Firestore Timestamp
-  solvedTimestamp?: Timestamp; // Firestore Timestamp
+  deadline?: string; // ISO String
+  solvedTimestamp?: string; // ISO String
 }
 
+// Use sample mock data (consistent with other pages)
+const sampleMockPosts: MockPost[] = [
+  {
+    id: 'mock1',
+    imageUrl: 'https://picsum.photos/600/600?random=1',
+    caption: 'Overflowing bin near the park entrance. Needs immediate attention.',
+    category: 'garbage',
+    location: { latitude: 19.0760, longitude: 72.8777 },
+    address: 'Near Central Park Entrance, Mock City',
+    timestamp: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
+    userId: 'mock_citizen_1',
+    userName: 'Concerned Citizen A',
+    status: 'pending',
+    deadline: new Date(Date.now() + 86400000 * 2).toISOString(), // 2 days from now
+  },
+   {
+    id: 'mock_local_1',
+    imageUrl: 'https://picsum.photos/600/600?random=4',
+    caption: 'Pothole on Oak Avenue',
+    category: 'potholes',
+    location: { latitude: 19.0800, longitude: 72.8800 },
+    address: 'Oak Avenue, Mock City',
+    timestamp: new Date(Date.now() - 86400000 * 2).toISOString(), // 2 days ago
+    userId: 'mock_citizen_user',
+    userName: 'Citizen User (Mock)',
+    status: 'pending',
+    deadline: new Date(Date.now() + 86400000 * 7).toISOString(),
+  },
+  {
+    id: 'mock2',
+    imageUrl: 'https://picsum.photos/600/600?random=2',
+    caption: 'Drainage blocked on Main Street. Water logging during rains.',
+    category: 'drainage',
+    address: '123 Main Street, Mock City',
+    timestamp: new Date(Date.now() - 86400000 * 3).toISOString(), // 3 days ago
+    userId: 'mock_citizen_2',
+    userName: 'Resident B',
+    status: 'solved',
+    municipalReply: 'The drainage has been cleared by our team.',
+    solvedTimestamp: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
+  },
+];
 
-// Helper to convert Firestore Timestamp to Date or return null
-const timestampToDate = (timestamp: Timestamp | undefined): Date | null => {
-    if (!timestamp) return null;
-    try {
-        return timestamp.toDate();
-    } catch (e) {
-        console.error("Error converting Timestamp:", e, timestamp);
-        return null;
-    }
-}
 
-// Helper to format Date or return 'N/A'
-const formatDate = (date: Date | null, formatString: string, options?: any): string => {
-    if (!date) return 'N/A';
-    try {
-        return format(date, formatString, options);
-    } catch (e) {
-        console.error("Error formatting date:", e, date);
-        return "Error date";
-    }
-}
-const formatRelativeDate = (date: Date | null): string => formatDate(date, '', { addSuffix: true }) || 'a while ago';
-const formatFullDate = (date: Date | null): string => formatDate(date, "MMM d, yyyy, h:mm a");
-const formatDeadline = (date: Date | null): string => formatDate(date, "MMM d, yyyy");
+// Helper functions for date formatting (similar to citizen home)
+const parseAndFormatDate = (isoString: string | undefined, formatFn: (date: Date, options?: any) => string, options?: any): string => {
+  if (!isoString) return 'N/A';
+  try {
+    const date = parseISO(isoString);
+    return formatFn(date, options);
+  } catch (e) {
+    console.error("Error parsing/formatting date:", e, isoString);
+    return "Error date";
+  }
+};
+const formatRelativeDate = (isoString: string): string => parseAndFormatDate(isoString, formatDistanceToNow, { addSuffix: true }) || 'a while ago';
+const formatFullDate = (isoString: string): string => parseAndFormatDate(isoString, (d) => d.toLocaleDateString('en-US', {
+      year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+    }));
+const formatDeadline = (isoString?: string): string | null => {
+     if (!isoString) return null;
+     return parseAndFormatDate(isoString, (d) => d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }));
+};
 
 
 export default function MunicipalIssuesPage() {
-  const [allPosts, setAllPosts] = useState<Post[]>([]); // Store all posts from Firestore
-  const [filteredPosts, setFilteredPosts] = useState<Post[]>([]); // Posts to display based on filter
+  const [allPosts, setAllPosts] = useState<MockPost[]>([]); // Store all mock posts
+  const [filteredPosts, setFilteredPosts] = useState<MockPost[]>([]); // Posts to display
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'pending' | 'solved' | 'all'>('pending');
-  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [selectedPost, setSelectedPost] = useState<MockPost | null>(null);
   const [replyText, setReplyText] = useState('');
   const [isReplying, setIsReplying] = useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState<Record<string, boolean>>({});
@@ -78,62 +114,42 @@ export default function MunicipalIssuesPage() {
   const { toast } = useToast();
 
 
-  // Load initial data from Firestore
+  // Load initial mock data
   useEffect(() => {
     setLoading(true);
     setError(null);
-    console.log("Setting up Firestore listener for posts...");
+    console.log("Frontend-only mode: Loading mock issues...");
 
-    if (!db) {
-      setError("Firestore is not initialized. Check Firebase configuration.");
-      setLoading(false);
-      console.error("Firestore instance (db) is null.");
-      return;
+    try {
+        // Load from localStorage or use sample data
+        const storedPosts = localStorage.getItem('mockPosts');
+        let postsData: MockPost[];
+
+        if (storedPosts) {
+            postsData = JSON.parse(storedPosts);
+            console.log(`Loaded ${postsData.length} mock posts from localStorage for issues page.`);
+        } else {
+            postsData = sampleMockPosts; // Use sample data if nothing in storage
+            console.log("Using sample mock posts for issues page.");
+        }
+
+         // Basic validation (ensure required fields exist)
+         postsData = postsData.filter(post =>
+             post.id && post.imageUrl && post.caption && post.category && post.timestamp && post.userId && post.status
+         );
+
+         // Sort by timestamp descending
+         postsData.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+        setAllPosts(postsData);
+
+    } catch (err: any) {
+         console.error("Error loading/processing mock posts:", err);
+         setError(`Failed to load mock issues. ${err.message}`);
+    } finally {
+        // Simulate loading time
+        setTimeout(() => setLoading(false), 500);
     }
-
-    const postsCollection = collection(db, 'posts');
-    // Order by timestamp descending (most recent first)
-    const q = query(postsCollection, orderBy('timestamp', 'desc'));
-
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      console.log(`Firestore snapshot received: ${querySnapshot.size} docs`);
-      try {
-        const postsData = querySnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        } as Post));
-
-        // Basic validation
-        const validPosts = postsData.filter(post =>
-            post.id &&
-            post.timestamp && // Ensure timestamp exists
-            post.imageUrl &&
-            post.caption &&
-            post.userId &&
-            // post.category && // Check for category - Making optional for now if older data exists
-            post.status // Ensure status exists
-        );
-        console.log(`Valid posts after filtering: ${validPosts.length}`);
-
-        setAllPosts(validPosts);
-      } catch (err: any) {
-         console.error("Error processing snapshot data:", err);
-         setError(`Failed to process issue data. ${err.message}`);
-      } finally {
-        setLoading(false); // Set loading false after processing or error
-      }
-
-    }, (err) => {
-      console.error("Error fetching posts from Firestore: ", err);
-      setError(`Failed to load issues. Check console for details. (Code: ${err.code})`);
-      setLoading(false);
-    });
-
-    // Cleanup subscription on unmount
-    return () => {
-      console.log("Unsubscribing from Firestore posts listener.");
-      unsubscribe();
-    };
   }, []); // Run only once on mount
 
   // Apply filter whenever allPosts or filter changes
@@ -144,11 +160,11 @@ export default function MunicipalIssuesPage() {
     } else {
       setFilteredPosts(allPosts.filter(post => post.status === filter));
     }
-     console.log(`Filtered posts count: ${filteredPosts.length}`);
+     console.log(`Filtered mock posts count: ${filteredPosts.length}`);
   }, [filter, allPosts]); // React to changes in filter or the base data
 
 
-  const handleOpenReplyDialog = (post: Post) => {
+  const handleOpenReplyDialog = (post: MockPost) => {
     setSelectedPost(post);
     setReplyText(post.municipalReply || '');
     setDialogError(null);
@@ -161,87 +177,97 @@ export default function MunicipalIssuesPage() {
     setIsReplying(false);
   };
 
-  // Send reply and update status in Firestore
+  // Simulate sending reply and updating status
   const handleSendReply = async (e: FormEvent) => {
     e.preventDefault();
     if (!selectedPost || !replyText.trim()) {
         setDialogError("Please enter a reply message.");
         return;
     };
-    if (!db || !selectedPost.id) {
-        setDialogError("Database connection or Post ID missing.");
-        return;
-    }
 
     setIsReplying(true);
     setDialogError(null);
-    console.log(`Sending reply for post ${selectedPost.id}: ${replyText.trim()}`);
+    console.log(`Simulating sending reply for post ${selectedPost.id}: ${replyText.trim()}`);
 
-    const postDocRef = doc(db, 'posts', selectedPost.id);
+    // Simulate API call/update delay
+    await new Promise(resolve => setTimeout(resolve, 700));
 
     try {
-      await updateDoc(postDocRef, {
-        municipalReply: replyText.trim(),
-        status: 'solved',
-        solvedTimestamp: serverTimestamp() // Use server timestamp
-      });
+      // Update local state first
+      const updatedPosts = allPosts.map(p =>
+        p.id === selectedPost.id
+          ? { ...p, status: 'solved' as 'solved', municipalReply: replyText.trim(), solvedTimestamp: new Date().toISOString() }
+          : p
+      );
+      setAllPosts(updatedPosts);
 
-      toast({ title: "Reply Sent", description: "Issue marked as solved." });
+      // Update localStorage
+      localStorage.setItem('mockPosts', JSON.stringify(updatedPosts));
+      console.log(`Mock post ${selectedPost.id} updated in localStorage.`);
+
+      toast({ title: "Reply Sent (Simulated)", description: "Issue marked as solved." });
       handleCloseReplyDialog();
     } catch (err: any) {
-      console.error("Error sending reply:", err);
-      const message = `Failed to send reply: ${err.message}`;
+      console.error("Error simulating reply:", err);
+      const message = `Failed to simulate reply: ${err.message}`;
       setDialogError(message);
-      toast({ title: "Reply Error", description: message, variant: "destructive" });
+      toast({ title: "Reply Error (Simulated)", description: message, variant: "destructive" });
     } finally {
       setIsReplying(false);
     }
   };
 
-  // Mark issue as solved in Firestore
+  // Simulate marking issue as solved
   const handleMarkAsSolved = async (postId: string) => {
-    if (!postId || !db) {
-        toast({ title: "Error", description: "Post ID or database connection missing.", variant: "destructive"});
-        return;
-    }
     setIsUpdatingStatus(prev => ({ ...prev, [postId]: true }));
-    console.log(`Marking post ${postId} as solved.`);
+    console.log(`Simulating marking post ${postId} as solved.`);
 
-    const postDocRef = doc(db, 'posts', postId);
+     // Simulate API call/update delay
+     await new Promise(resolve => setTimeout(resolve, 500));
 
     try {
-       await updateDoc(postDocRef, {
-         status: 'solved',
-         solvedTimestamp: serverTimestamp() // Use server timestamp
-       });
+       // Update local state
+       const updatedPosts = allPosts.map(p =>
+        p.id === postId
+          ? { ...p, status: 'solved' as 'solved', solvedTimestamp: new Date().toISOString() }
+          : p
+      );
+       setAllPosts(updatedPosts);
 
-      toast({ title: "Status Updated", description: "Issue marked as solved." });
+       // Update localStorage
+       localStorage.setItem('mockPosts', JSON.stringify(updatedPosts));
+       console.log(`Mock post ${postId} marked as solved in localStorage.`);
+
+      toast({ title: "Status Updated (Simulated)", description: "Issue marked as solved." });
     } catch (err: any) {
-      console.error("Error marking as solved:", err);
-      toast({ title: "Update Error", description: `Failed to update status: ${err.message}`, variant: "destructive" });
+      console.error("Error simulating marking as solved:", err);
+      toast({ title: "Update Error (Simulated)", description: `Failed to update status: ${err.message}`, variant: "destructive" });
     } finally {
       setIsUpdatingStatus(prev => ({ ...prev, [postId]: false }));
     }
   };
 
-   // Delete issue from Firestore
+   // Simulate deleting issue
    const handleDeleteIssue = async (postId: string) => {
-      if (!postId || !db) {
-        toast({ title: "Error", description: "Post ID or database connection missing.", variant: "destructive"});
-        return;
-    }
-     console.warn(`Deleting post ${postId}.`);
+     console.warn(`Simulating deletion of post ${postId}.`);
      setIsUpdatingStatus(prev => ({ ...prev, [postId]: true })); // Use loading state for delete button too
 
-     const postDocRef = doc(db, 'posts', postId);
+     // Simulate API call/update delay
+     await new Promise(resolve => setTimeout(resolve, 600));
 
      try {
-        await deleteDoc(postDocRef);
-        toast({ title: "Issue Deleted" });
-        // No need to manually update state, onSnapshot will handle it
+         // Update local state
+         const updatedPosts = allPosts.filter(p => p.id !== postId);
+         setAllPosts(updatedPosts);
+
+        // Update localStorage
+        localStorage.setItem('mockPosts', JSON.stringify(updatedPosts));
+        console.log(`Mock post ${postId} removed from localStorage.`);
+
+        toast({ title: "Issue Deleted (Simulated)" });
      } catch(err: any) {
-         console.error("Error deleting issue:", err);
-        toast({ title: "Deletion Error", description: err.message, variant: "destructive" });
+         console.error("Error simulating deletion:", err);
+        toast({ title: "Deletion Error (Simulated)", description: err.message, variant: "destructive" });
      } finally {
         setIsUpdatingStatus(prev => ({ ...prev, [postId]: false }));
      }
@@ -255,6 +281,7 @@ export default function MunicipalIssuesPage() {
           <div className='space-y-1.5'>
              <Skeleton className="h-5 w-20 bg-muted" />
              <Skeleton className="h-3 w-24 bg-muted" />
+             <Skeleton className="h-4 w-16 mt-1 bg-muted" /> {/* Category placeholder */}
           </div>
           <div className='space-y-1.5 text-right'>
              <Skeleton className="h-3 w-28 bg-muted" />
@@ -279,7 +306,7 @@ export default function MunicipalIssuesPage() {
   return (
     <div className="container mx-auto px-4 py-6">
       <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-        <h1 className="text-2xl sm:text-3xl font-bold text-primary">Reported Issues</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-primary">Reported Issues (Mock)</h1>
         <div className="flex items-center gap-2 w-full sm:w-auto">
            <Filter className="h-5 w-5 text-muted-foreground" />
            <Select value={filter} onValueChange={(value) => setFilter(value as 'all' | 'pending' | 'solved')}>
@@ -317,10 +344,8 @@ export default function MunicipalIssuesPage() {
             </Card>
         ) : (
           filteredPosts.map((post) => {
-            const postDate = timestampToDate(post.timestamp);
-            const deadlineDate = timestampToDate(post.deadline);
-            const solvedDate = timestampToDate(post.solvedTimestamp);
-            const formattedDeadline = deadlineDate ? formatDeadline(deadlineDate) : 'N/A';
+            const deadlineDate = post.deadline ? parseISO(post.deadline) : null;
+            const formattedDeadline = deadlineDate ? formatDeadline(post.deadline) : 'N/A';
             const isOverdue = post.status === 'pending' && deadlineDate && new Date() > deadlineDate;
 
             const displayAddress = post.address || (post.location ? `Lat: ${post.location.latitude.toFixed(4)}, Lon: ${post.location.longitude.toFixed(4)}` : 'Not provided');
@@ -345,9 +370,12 @@ export default function MunicipalIssuesPage() {
                                 {isOverdue ? 'Overdue' : 'Pending'}
                               </span>
                           )}
-                           <span className="ml-2 text-xs font-medium text-muted-foreground bg-secondary px-2 py-1 rounded border border-border capitalize">{post.category || 'General'}</span>
-                          <p className="text-xs text-muted-foreground mt-1.5" title={formatFullDate(postDate)}>
-                            Reported {formatRelativeDate(postDate)}
+                           {/* Display Category */}
+                           <span className="ml-2 text-xs font-medium text-muted-foreground bg-secondary px-2 py-1 rounded border border-border capitalize inline-flex items-center">
+                               <Tag className="h-3.5 w-3.5 mr-1"/> {post.category || 'General'}
+                           </span>
+                          <p className="text-xs text-muted-foreground mt-1.5" title={formatFullDate(post.timestamp)}>
+                            Reported {formatRelativeDate(post.timestamp)}
                           </p>
                        </div>
                        {/* Right side: User Info */}
@@ -387,10 +415,10 @@ export default function MunicipalIssuesPage() {
                        )}
                   </div>
                   {/* Deadline */}
-                  {deadlineDate && (
+                  {post.deadline && (
                       <div className={cn("flex items-center text-sm gap-1.5", isOverdue ? "text-red-600 font-semibold" : "text-muted-foreground")}>
                           <CalendarDays className="h-4 w-4 mr-0 flex-shrink-0" />
-                          <span>Deadline: {formattedDeadline} {isOverdue && '(Overdue)'}</span>
+                          <span>Deadline: {formatDeadline(post.deadline)} {isOverdue && '(Overdue)'}</span>
                       </div>
                   )}
                   {/* Municipal Reply */}
@@ -398,14 +426,14 @@ export default function MunicipalIssuesPage() {
                     <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-md">
                       <p className="text-sm font-semibold text-green-800 mb-1">Municipal Response:</p>
                       <p className="text-sm text-green-700 whitespace-pre-wrap break-words">{post.municipalReply}</p>
-                       {solvedDate && (
-                          <p className="text-xs text-muted-foreground mt-1.5 italic">Responded: {formatRelativeDate(solvedDate)}</p>
+                       {post.solvedTimestamp && (
+                          <p className="text-xs text-muted-foreground mt-1.5 italic">Responded: {formatRelativeDate(post.solvedTimestamp)}</p>
                         )}
                     </div>
                   )}
-                   {post.status === 'solved' && !post.municipalReply && solvedDate && (
+                   {post.status === 'solved' && !post.municipalReply && post.solvedTimestamp && (
                       <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
-                         <p className="text-sm text-yellow-700 italic">Marked as solved {formatRelativeDate(solvedDate)} without comment.</p>
+                         <p className="text-sm text-yellow-700 italic">Marked as solved {formatRelativeDate(post.solvedTimestamp)} without comment.</p>
                       </div>
                   )}
                 </CardContent>
@@ -511,4 +539,3 @@ export default function MunicipalIssuesPage() {
     </div>
   );
 }
-

@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { ChangeEvent, FormEvent } from 'react';
@@ -31,6 +32,7 @@ import {
   Check,
   Image as ImageIcon,
   X, // Added X import
+  Map, // Added Map import
 } from 'lucide-react';
 import Image from 'next/image';
 import { useToast } from '@/hooks/use-toast';
@@ -42,6 +44,15 @@ import {
 } from '@/components/ui/popover';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+// Removed LocationPicker import as it was causing errors and map interaction is complex for this scope
+// import { LocationPicker } from '@/components/LocationPicker'; // Import the LocationPicker
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+  } from "@/components/ui/select";
 
 interface Location {
   latitude: number;
@@ -58,6 +69,7 @@ async function getAddressFromCoordinates(lat: number, lon: number): Promise<stri
 
 export default function AddPostPage() {
   const [caption, setCaption] = useState('');
+  const [category, setCategory] = useState<string>(''); // Added category state
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [location, setLocation] = useState<Location | null>(null);
@@ -73,6 +85,7 @@ export default function AddPostPage() {
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const [showCameraPreview, setShowCameraPreview] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
+  const [showLocationPicker, setShowLocationPicker] = useState(false); // State for modal
 
   const router = useRouter();
   const { toast } = useToast();
@@ -80,12 +93,10 @@ export default function AddPostPage() {
    // Cleanup camera stream on component unmount
    useEffect(() => {
     return () => {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-        console.log("Camera stream stopped on unmount.");
-      }
+      stopCameraStream(); // Ensure stream is stopped
+      console.log("Cleanup: Camera stream stopped on unmount.");
     };
-  }, [stream]);
+  }, []); // Empty dependency array, runs only once on mount/unmount
 
   // Function to request camera permission
   const requestCameraPermission = async () => {
@@ -215,15 +226,17 @@ export default function AddPostPage() {
     }
     setIsLocating(true);
     setError(null);
+    setLocation(null); // Clear previous location
     setAddress(null); // Clear old address
 
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         const { latitude, longitude } = position.coords;
         console.log(`Location obtained: Lat ${latitude}, Lon ${longitude}`);
-        setLocation({ latitude, longitude });
+        const newLocation = { latitude, longitude };
+        setLocation(newLocation);
         const fetchedAddress = await getAddressFromCoordinates(latitude, longitude);
-         setAddress(fetchedAddress ?? `Lat: ${latitude.toFixed(4)}, Lon: ${longitude.toFixed(4)}`); // Use coords as fallback
+        setAddress(fetchedAddress ?? `Lat: ${latitude.toFixed(4)}, Lon: ${longitude.toFixed(4)}`); // Use coords as fallback
         setIsLocating(false);
         toast({ title: 'Location Added', description: fetchedAddress ? 'Address found.' : 'Coordinates saved.' });
       },
@@ -241,21 +254,38 @@ export default function AddPostPage() {
     );
   };
 
+   // Mock function for location picking - simply uses current location for now
+   const handlePickLocation = () => {
+     handleGetLocation(); // Reuse the get current location logic
+     toast({ title: "Location Picker (Mock)", description: "Using current location for now." });
+     // In a real implementation, this would open a map modal
+     // setShowLocationPicker(true);
+   };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
 
     // Removed user login check as auth is removed
-    // if (!auth.currentUser) { ... }
 
     if (!imageFile) {
       setError('Please select or capture an image.');
       toast({ title: 'Missing Image', variant: 'destructive' });
       return;
     }
+     if (!category) { // Check if category is selected
+      setError('Please select an issue category.');
+      toast({ title: 'Missing Category', variant: 'destructive' });
+      return;
+    }
     if (!caption.trim()) {
       setError('Please enter a caption.');
       toast({ title: 'Missing Caption', variant: 'destructive' });
+      return;
+    }
+    if (!location) { // Check if location is set
+      setError('Please add a location for the issue.');
+      toast({ title: 'Missing Location', variant: 'destructive' });
       return;
     }
 
@@ -265,6 +295,7 @@ export default function AddPostPage() {
     // Simulate upload and post creation
     console.log('Frontend-only: Simulating post submission...');
     console.log('Caption:', caption.trim());
+    console.log('Category:', category);
     console.log('Image File:', imageFile.name);
     console.log('Location:', location);
     console.log('Address:', address);
@@ -290,17 +321,24 @@ export default function AddPostPage() {
                 id: `mock_${Date.now()}`, // Generate mock ID
                 imageUrl: imagePreview || 'https://picsum.photos/600/600?grayscale', // Use preview or placeholder
                 caption: caption.trim(),
+                category: category, // Save category
                 location: location ? { latitude: location.latitude, longitude: location.longitude } : undefined,
                 address: address,
                 timestamp: new Date().toISOString(), // Use ISO string for mock timestamp
                 userId: 'mock_citizen_user', // Mock user ID
                 userName: 'Citizen User (Mock)',
-                status: 'pending',
+                status: 'pending', // Default status
                 deadline: deadline?.toISOString(),
             };
-            const existingPosts = JSON.parse(localStorage.getItem('mockPosts') || '[]');
-            localStorage.setItem('mockPosts', JSON.stringify([newPost, ...existingPosts]));
-            console.log('Mock post saved to localStorage.');
+            try {
+                const existingPosts = JSON.parse(localStorage.getItem('mockPosts') || '[]');
+                localStorage.setItem('mockPosts', JSON.stringify([newPost, ...existingPosts]));
+                console.log('Mock post saved to localStorage.');
+            } catch (storageError) {
+                console.error("Error saving mock post to localStorage:", storageError);
+                setError("Could not save the post locally.");
+                // Still navigate away to avoid user being stuck
+            }
 
 
             // Navigate to Home Feed AFTER successful mock submission
@@ -320,7 +358,7 @@ export default function AddPostPage() {
             Report an Issue
           </CardTitle>
           <CardDescription className="text-center text-muted-foreground pt-1">
-            Capture or upload a picture and describe the cleanliness issue.
+            Capture/upload picture, add details, and specify the location.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-6">
@@ -373,6 +411,7 @@ export default function AddPostPage() {
                       fill
                       style={{ objectFit: 'contain' }}
                       sizes="(max-width: 640px) 90vw, 320px"
+                      data-ai-hint="waste management urban issue"
                     />
                      <Button
                         type="button"
@@ -416,6 +455,26 @@ export default function AddPostPage() {
               </div>
             </div>
 
+            {/* Category Dropdown */}
+             <div>
+               <Label htmlFor="category" className="font-medium text-gray-700">
+                 Issue Category *
+               </Label>
+               <Select value={category} onValueChange={setCategory} required disabled={isSubmitting}>
+                 <SelectTrigger id="category" className="w-full mt-1 shadow-sm focus:ring-primary focus:border-primary">
+                   <SelectValue placeholder="Select a category" />
+                 </SelectTrigger>
+                 <SelectContent>
+                   <SelectItem value="garbage">Garbage</SelectItem>
+                   <SelectItem value="drainage">Drainage</SelectItem>
+                   <SelectItem value="potholes">Potholes</SelectItem>
+                   <SelectItem value="streetlights">Streetlights</SelectItem>
+                   <SelectItem value="other">Other</SelectItem>
+                 </SelectContent>
+               </Select>
+             </div>
+
+
             {/* Caption */}
             <div>
               <Label htmlFor="caption" className="font-medium text-gray-700">
@@ -438,32 +497,46 @@ export default function AddPostPage() {
 
             {/* Geolocation */}
             <div>
-              <Label className="font-medium text-gray-700">Location (Optional)</Label>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleGetLocation}
-                disabled={isLocating || isSubmitting}
-                className="w-full mt-1 flex items-center justify-center text-accent border-accent hover:bg-accent/10 shadow-sm"
-              >
-                {isLocating ? (
-                  <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                ) : location ? (
-                  <MapPin className="h-5 w-5 mr-2 text-green-600" />
-                ) : (
-                  <LocateFixed className="h-5 w-5 mr-2" />
-                )}
-                <span>
-                  {isLocating ? 'Locating...' : location ? 'Location Added' : 'Add Current Location'}
-                </span>
-              </Button>
-              {address && (
-                <p className="text-sm text-muted-foreground mt-2 flex items-start gap-1.5">
-                  <MapPin className="h-4 w-4 mr-0 flex-shrink-0 mt-px text-gray-500" />
-                  <span className="line-clamp-2">{address}</span>
-                </p>
-              )}
-            </div>
+               <Label className="font-medium text-gray-700">Location *</Label>
+               <div className="flex gap-3 mt-1">
+                 <Button
+                   type="button"
+                   variant="outline"
+                   onClick={handleGetLocation}
+                   disabled={isLocating || isSubmitting}
+                   className="flex-1 flex items-center justify-center text-accent border-accent hover:bg-accent/10 shadow-sm"
+                 >
+                   {isLocating ? (
+                     <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                   ) : location ? (
+                     <MapPin className="h-5 w-5 mr-2 text-green-600" />
+                   ) : (
+                     <LocateFixed className="h-5 w-5 mr-2" />
+                   )}
+                   <span>
+                     {isLocating ? 'Locating...' : location ? 'Location Added' : 'Add Current Location'}
+                   </span>
+                 </Button>
+                 {/* Add "Pick on Map" button - Currently uses current location logic */}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handlePickLocation}
+                    disabled={isLocating || isSubmitting}
+                    className="flex-1 flex items-center justify-center text-primary border-primary hover:bg-primary/10 shadow-sm"
+                    title="Pick location on map (mock - uses current)"
+                   >
+                      <Map className="h-5 w-5 mr-2"/> Pick on Map (Mock)
+                   </Button>
+               </div>
+               {address && (
+                 <p className="text-sm text-muted-foreground mt-2 flex items-start gap-1.5">
+                   <MapPin className="h-4 w-4 mr-0 flex-shrink-0 mt-px text-gray-500" />
+                   <span className="line-clamp-2">{address}</span>
+                 </p>
+               )}
+             </div>
+
 
             {/* Deadline Picker */}
             <div>
@@ -500,7 +573,7 @@ export default function AddPostPage() {
             {/* Upload Progress */}
             {isSubmitting && uploadProgress > 0 && (
                 <div className="space-y-1">
-                  <Label className="text-sm font-medium text-primary">Uploading Image...</Label>
+                  <Label className="text-sm font-medium text-primary">Submitting Issue...</Label>
                   <Progress value={uploadProgress} className="w-full h-2" />
                   <p className="text-xs text-muted-foreground text-right">{Math.round(uploadProgress)}%</p>
                 </div>
@@ -512,7 +585,7 @@ export default function AddPostPage() {
             type="submit"
             form="add-post-form"
             className="w-full bg-primary hover:bg-primary/90 text-lg py-3 font-semibold shadow-md disabled:opacity-70"
-            disabled={isSubmitting || !imageFile || !caption.trim()}
+            disabled={isSubmitting || !imageFile || !category || !caption.trim() || !location}
           >
             {isSubmitting ? (
               <>
@@ -525,8 +598,10 @@ export default function AddPostPage() {
         </CardFooter>
       </Card>
 
-      {/* Removed OpenStreetMap attribution as geocoding is mocked */}
-       {/* <p className="text-center text-xs text-muted-foreground mt-6"> ... </p> */}
+      {/* Removed LocationPicker Modal as it's complex and mocked */}
+      {/* <LocationPicker isOpen={showLocationPicker} onClose={() => setShowLocationPicker(false)} onLocationSelect={handleLocationSelect} /> */}
+
+       {/* Removed OpenStreetMap attribution as geocoding is mocked */}
     </div>
   );
 }
