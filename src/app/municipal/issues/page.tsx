@@ -400,7 +400,7 @@ export default function MunicipalIssuesPage() {
                       <p className="text-sm text-green-700 whitespace-pre-wrap break-words">{post.municipalReply}</p>
                        {solvedDate && (
                           <p className="text-xs text-muted-foreground mt-1.5 italic">Responded: {formatRelativeDate(solvedDate)}</p>
-                       )}
+                        )}
                     </div>
                   )}
                    {post.status === 'solved' && !post.municipalReply && solvedDate && (
