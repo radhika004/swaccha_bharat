@@ -1,0 +1,1 @@
+This is a placeholder for the new page content.  The user is requesting to add a new page to the municipal section where issues are categorized and listed. This is similar to the existing issue list page, but with categories displayed separately. I need to make the relevant UI pages.
