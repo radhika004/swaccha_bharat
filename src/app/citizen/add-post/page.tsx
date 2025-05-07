@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { ChangeEvent, FormEvent } from 'react';
@@ -31,7 +32,7 @@ import {
   Image as ImageIcon,
   X, 
   Map, 
-  Sparkles, // Icon for AI categorization
+  Sparkles,
 } from 'lucide-react';
 import Image from 'next/image';
 import { useToast } from '@/hooks/use-toast';
@@ -43,23 +44,51 @@ import {
 } from '@/components/ui/popover';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { categorizeIssue } from '@/ai/flows/categorize-issue-flow'; // Import AI categorization flow
+// Removed Genkit categorization: import { categorizeIssue } from '@/ai/flows/categorize-issue-flow'; 
+import { LocationPicker } from '@/components/LocationPicker';
+
 
 interface Location {
   latitude: number;
   longitude: number;
 }
 
-// Mock function since OpenStreetMap fetch is removed
-async function getAddressFromCoordinates(lat: number, lon: number): Promise<string | null> {
-  console.log(`Mock fetching address for: Lat ${lat}, Lon ${lon}`);
-  await new Promise(resolve => setTimeout(resolve, 500)); // Simulate network delay
-  return `Mock Address near ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+// Function to call the FastAPI backend for YOLO classification
+async function categorizeIssueWithYOLO(imageFile: File): Promise<{ category: string, confidence?: number } | { error: string }> {
+  const formData = new FormData();
+  formData.append('file', imageFile);
+
+  try {
+    const response = await fetch('http://localhost:8000/predict/', { // Ensure this URL matches your FastAPI backend
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ detail: "Unknown server error" }));
+      console.error('FastAPI Error Response:', errorData);
+      return { error: `Server error: ${response.status} - ${errorData.detail || response.statusText}` };
+    }
+
+    const result = await response.json();
+    console.log("YOLO API Result:", result);
+    if (result.error) {
+        return { error: result.error };
+    }
+    if (result.prediction) {
+      return { category: result.prediction.toLowerCase(), confidence: result.confidence };
+    } else {
+      return { error: 'Invalid response structure from classification server.' };
+    }
+  } catch (error: any) {
+    console.error('Error calling YOLO classification API:', error);
+    return { error: `Network or other error during classification: ${error.message}` };
+  }
 }
+
 
 export default function AddPostPage() {
   const [caption, setCaption] = useState('');
-  // Removed category state: const [category, setCategory] = useState<string>('');
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [location, setLocation] = useState<Location | null>(null);
@@ -67,7 +96,7 @@ export default function AddPostPage() {
   const [deadline, setDeadline] = useState<Date | undefined>(undefined);
   const [isLocating, setIsLocating] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isCategorizing, setIsCategorizing] = useState(false); // State for AI categorization
+  const [isCategorizing, setIsCategorizing] = useState(false); 
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -76,6 +105,7 @@ export default function AddPostPage() {
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const [showCameraPreview, setShowCameraPreview] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
 
   const router = useRouter();
   const { toast } = useToast();
@@ -222,10 +252,11 @@ export default function AddPostPage() {
         console.log(`Location obtained: Lat ${latitude}, Lon ${longitude}`);
         const newLocation = { latitude, longitude };
         setLocation(newLocation);
-        const fetchedAddress = await getAddressFromCoordinates(latitude, longitude);
-        setAddress(fetchedAddress ?? `Lat: ${latitude.toFixed(4)}, Lon: ${longitude.toFixed(4)}`);
+        // Using mock address for now as OpenStreetMap Nominatim can be rate-limited
+        const fetchedAddress = `Mock Address near ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+        setAddress(fetchedAddress);
         setIsLocating(false);
-        toast({ title: 'Location Added', description: fetchedAddress ? 'Address found.' : 'Coordinates saved.' });
+        toast({ title: 'Location Added', description: 'Address found.' });
       },
       (err) => {
         console.error('Error getting location:', err);
@@ -242,9 +273,16 @@ export default function AddPostPage() {
   };
 
    const handlePickLocation = () => {
-     handleGetLocation();
-     toast({ title: "Location Picker (Mock)", description: "Using current location for now." });
+     setShowLocationPicker(true);
    };
+   
+   const handleLocationSelect = (selectedLocation: { lat: number; lng: number; address: string }) => {
+    setLocation({ latitude: selectedLocation.lat, longitude: selectedLocation.lng });
+    setAddress(selectedLocation.address);
+    setShowLocationPicker(false);
+    toast({ title: 'Location Selected', description: 'Location picked from map.' });
+  };
+
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -267,37 +305,34 @@ export default function AddPostPage() {
     }
 
     setIsCategorizing(true);
-    setUploadProgress(0); // Reset progress for potential re-submission
+    setUploadProgress(0);
     toast({ title: 'Categorizing Issue...', description: 'AI is analyzing your report.' });
 
     let issueCategory = 'other'; // Default category
-    try {
-      const categorizationResult = await categorizeIssue({
-        caption: caption.trim(),
-        imageDataUri: imagePreview, // Send image preview (data URI) to AI
-      });
-      issueCategory = categorizationResult.category;
-      toast({ title: 'Issue Categorized!', description: `Category: ${issueCategory}` });
-    } catch (aiError: any) {
-      console.error('AI Categorization Error:', aiError);
-      setError(`AI categorization failed: ${aiError.message}. Defaulting to 'other'.`);
-      toast({ title: 'AI Error', description: 'Could not categorize issue, using default.', variant: 'destructive' });
-      // Continue with 'other' category
-    } finally {
-      setIsCategorizing(false);
-    }
+    const categorizationResult = await categorizeIssueWithYOLO(imageFile);
 
-    setIsSubmitting(true); // Now proceed to submission simulation
+    if ('error' in categorizationResult) {
+      console.error('YOLO Categorization Error:', categorizationResult.error);
+      setError(`AI categorization failed: ${categorizationResult.error}. Defaulting to 'other'.`);
+      toast({ title: 'AI Error', description: 'Could not categorize issue, using default.', variant: 'destructive' });
+    } else {
+      issueCategory = categorizationResult.category;
+      const confidenceText = categorizationResult.confidence ? ` (Confidence: ${categorizationResult.confidence * 100}%)` : '';
+      toast({ title: 'Issue Categorized!', description: `Category: ${issueCategory}${confidenceText}` });
+    }
+    setIsCategorizing(false);
+    
+
+    setIsSubmitting(true);
 
     console.log('Frontend-only: Simulating post submission...');
     console.log('Caption:', caption.trim());
-    console.log('AI Category:', issueCategory); // Log AI category
+    console.log('AI Category:', issueCategory);
     console.log('Image File:', imageFile.name);
     console.log('Location:', location);
     console.log('Address:', address);
     console.log('Deadline:', deadline);
 
-    // Simulate upload progress
     let progress = 0;
     const progressInterval = setInterval(() => {
       progress += 20;
@@ -315,7 +350,7 @@ export default function AddPostPage() {
                 id: `mock_${Date.now()}`,
                 imageUrl: imagePreview || 'https://picsum.photos/600/600?grayscale',
                 caption: caption.trim(),
-                category: issueCategory, // Use AI-determined category
+                category: issueCategory, 
                 location: location ? { latitude: location.latitude, longitude: location.longitude } : undefined,
                 address: address,
                 timestamp: new Date().toISOString(),
@@ -339,6 +374,10 @@ export default function AddPostPage() {
   };
 
   const isFormInvalid = !imageFile || !caption.trim() || !location;
+
+  if (showLocationPicker) {
+    return <LocationPicker onLocationSelect={handleLocationSelect} onCancel={() => setShowLocationPicker(false)} />;
+  }
 
   return (
     <div className="container mx-auto px-4 py-6 max-w-lg">
@@ -439,9 +478,6 @@ export default function AddPostPage() {
               </div>
             </div>
 
-            {/* Category is now automatically determined, so dropdown is removed */}
-            {/* Removed Category Dropdown */}
-
             <div>
               <Label htmlFor="caption" className="font-medium text-gray-700">
                 Caption *
@@ -488,9 +524,9 @@ export default function AddPostPage() {
                     onClick={handlePickLocation}
                     disabled={isLocating || isSubmitting || isCategorizing}
                     className="flex-1 flex items-center justify-center text-primary border-primary hover:bg-primary/10 shadow-sm"
-                    title="Pick location on map (mock - uses current)"
+                    title="Pick location on map"
                    >
-                      <Map className="h-5 w-5 mr-2"/> Pick on Map (Mock)
+                      <Map className="h-5 w-5 mr-2"/> Pick on Map
                    </Button>
                </div>
                {address && (
@@ -568,3 +604,4 @@ export default function AddPostPage() {
     </div>
   );
 }
+
