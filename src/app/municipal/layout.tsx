@@ -4,9 +4,8 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, ListChecks, BarChart3, LogOut, MountainIcon, Users, Settings, Bell } from 'lucide-react';
+import { LayoutDashboard, ListChecks, BarChart3, LogOut, MountainIcon, Users, Settings, Bell, Layers } from 'lucide-react'; // Added Layers
 import { cn } from '@/lib/utils';
-// Removed Firebase imports (signOut, auth)
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -20,13 +19,13 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 
-// Mock user data since AuthProvider and useAuth are removed
+// Mock user data
 const mockUser = {
     displayName: 'Municipal User',
-    photoURL: undefined, // Or a placeholder image URL
+    photoURL: undefined,
     phoneNumber: '+911234567890'
 };
-const authLoading = false; // Simulate loading as false
+const authLoading = false;
 
 export default function MunicipalLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -35,33 +34,31 @@ export default function MunicipalLayout({ children }: { children: ReactNode }) {
 
   const navItems = [
     { href: '/municipal/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { href: '/municipal/issues', label: 'Issues List', icon: ListChecks },
+    { href: '/municipal/issues/categories', label: 'Issue Categories', icon: Layers }, // Added Categories link
+    { href: '/municipal/issues', label: 'All Issues List', icon: ListChecks },
     { href: '/municipal/reports', label: 'Reports', icon: BarChart3 },
     { href: '/municipal/citizens', label: 'Citizen Management', icon: Users },
   ];
 
   const handleLogout = async () => {
     try {
-      // Simulate logout
       console.log("Simulating municipal user logout...");
-      await new Promise(resolve => setTimeout(resolve, 500)); // Simulate delay
+      await new Promise(resolve => setTimeout(resolve, 500));
       toast({ title: 'Logged Out', description: 'You have been logged out.' });
-      router.push('/'); // Redirect to landing page
+      router.push('/');
     } catch (error) {
       console.error('Error logging out:', error);
       toast({ title: 'Logout Failed', variant: 'destructive' });
     }
   };
 
-   // Get user initials for Avatar fallback
    const getInitials = (name?: string | null) => {
-     if (!name) return "M"; // Default to M for Municipal
+     if (!name) return "M";
      return name.split(' ').map(n => n[0]).join('').toUpperCase();
    };
 
    return (
        <div className="grid min-h-screen w-full md:grid-cols-[220px_1fr] lg:grid-cols-[280px_1fr]">
-           {/* Sidebar */}
            <div className="hidden border-r bg-muted/40 md:block">
            <div className="flex h-full max-h-screen flex-col gap-2">
                <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
@@ -69,12 +66,11 @@ export default function MunicipalLayout({ children }: { children: ReactNode }) {
                    <MountainIcon className="h-6 w-6" />
                    <span className="">SwachhConnect</span>
                </Link>
-               {/* Optional: Add notification bell or settings icon here */}
                </div>
                <div className="flex-1">
                <nav className="grid items-start px-2 text-sm font-medium lg:px-4">
                    {navItems.map((item) => {
-                   const isActive = pathname.startsWith(item.href); // Use startsWith for nested routes
+                   const isActive = pathname === item.href || (item.href !== '/municipal/dashboard' && pathname.startsWith(item.href));
                    return (
                        <Link
                        key={item.href}
@@ -91,16 +87,11 @@ export default function MunicipalLayout({ children }: { children: ReactNode }) {
                    })}
                </nav>
                </div>
-               {/* Optional: Sidebar footer content */}
-               {/* <div className="mt-auto p-4"> ... </div> */}
            </div>
            </div>
 
-           {/* Main Content Area */}
            <div className="flex flex-col">
-           {/* Header */}
            <header className="flex h-14 items-center gap-4 border-b bg-muted/40 px-4 lg:h-[60px] lg:px-6 sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-               {/* Mobile Sidebar Trigger */}
                <Sheet>
                    <SheetTrigger asChild>
                    <Button
@@ -108,12 +99,11 @@ export default function MunicipalLayout({ children }: { children: ReactNode }) {
                        size="icon"
                        className="shrink-0 md:hidden"
                    >
-                       <ListChecks className="h-5 w-5" /> {/* Changed Icon */}
+                       <ListChecks className="h-5 w-5" />
                        <span className="sr-only">Toggle navigation menu</span>
                    </Button>
                    </SheetTrigger>
                    <SheetContent side="left" className="flex flex-col p-0">
-                   {/* Mobile Navigation */}
                    <nav className="grid gap-2 text-lg font-medium p-6">
                        <Link
                            href="/municipal/dashboard"
@@ -123,7 +113,7 @@ export default function MunicipalLayout({ children }: { children: ReactNode }) {
                            <span className="">SwachhConnect</span>
                        </Link>
                        {navItems.map((item) => {
-                       const isActive = pathname.startsWith(item.href);
+                       const isActive = pathname === item.href || (item.href !== '/municipal/dashboard' && pathname.startsWith(item.href));
                        return (
                            <Link
                            key={item.href}
@@ -139,7 +129,6 @@ export default function MunicipalLayout({ children }: { children: ReactNode }) {
                        );
                        })}
                    </nav>
-                   {/* Mobile Logout */}
                    <div className="mt-auto p-4 border-t">
                        <Button onClick={handleLogout} variant="ghost" className="w-full justify-start gap-4">
                            <LogOut className="h-5 w-5" /> Logout
@@ -148,16 +137,13 @@ export default function MunicipalLayout({ children }: { children: ReactNode }) {
                    </SheetContent>
                </Sheet>
 
-               {/* Header Content (e.g., Search, User Menu) */}
                <div className="w-full flex-1">
-               {/* Optional: Add a search bar */}
-               {/* <form> ... </form> */}
                </div>
                <DropdownMenu>
                <DropdownMenuTrigger asChild>
                    <Button variant="secondary" size="icon" className="rounded-full">
                    {authLoading ? (
-                       <div className="h-8 w-8 rounded-full bg-muted"></div> // Placeholder
+                       <div className="h-8 w-8 rounded-full bg-muted"></div>
                    ) : (
                        <Avatar className="h-8 w-8">
                        <AvatarImage src={mockUser?.photoURL || undefined} alt={mockUser?.displayName || "User"} />
@@ -172,7 +158,6 @@ export default function MunicipalLayout({ children }: { children: ReactNode }) {
                <DropdownMenuContent align="end">
                    <DropdownMenuLabel>{mockUser?.displayName || mockUser?.phoneNumber || "Municipal User"}</DropdownMenuLabel>
                    <DropdownMenuSeparator />
-                   {/* Add Profile/Settings links if needed */}
                    <DropdownMenuItem disabled>
                        <Settings className="mr-2 h-4 w-4"/> Settings (Soon)
                    </DropdownMenuItem>
@@ -184,14 +169,13 @@ export default function MunicipalLayout({ children }: { children: ReactNode }) {
                </DropdownMenu>
            </header>
 
-           {/* Page Content */}
            <main className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6 bg-background">
                {authLoading ? (
                    <div className="flex items-center justify-center flex-1">
-                       <p>Loading...</p> // Simple loading text
+                       <Loader2 className="h-8 w-8 animate-spin text-primary" />
                    </div>
                ) : (
-                   children // Render the actual page content
+                   children
                )}
            </main>
            </div>
