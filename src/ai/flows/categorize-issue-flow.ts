@@ -40,15 +40,27 @@ const categorizePrompt = ai.definePrompt({
   name: 'categorizeIssuePrompt',
   input: { schema: CategorizeIssueInputSchema },
   output: { schema: CategorizeIssueOutputSchema },
-  prompt: `You are an AI assistant that categorizes civic issues.
-Based on the provided caption and image (if available), determine the most appropriate category for the issue.
-The available categories are: ${PREDEFINED_CATEGORIES.join(', ')}.
-Please select only one category from this list.
+  prompt: `You are an expert AI assistant responsible for categorizing civic issues based on visual and textual information.
+Your goal is to accurately assign one of the following predefined categories to the reported issue:
+- garbage
+- drainage
+- potholes
+- streetlights
+- other
 
+Analyze the provided issue caption and, more importantly, the issue image (if available).
 Issue Caption: {{{caption}}}
 {{#if imageDataUri}}Issue Image: {{media url=imageDataUri}}{{/if}}
 
-Output the category in the specified JSON format. If unsure, categorize as 'other'.`,
+Instructions for categorization:
+1.  Prioritize the visual evidence from the image if one is provided. The image is the primary source for categorization.
+2.  Use the caption as supplementary information to clarify or confirm the visual evidence.
+3.  If the image or caption depicts multiple potential issues, categorize based on the most prominent or urgent civic problem shown.
+4.  Select ONLY ONE category from the predefined list.
+5.  If you are highly uncertain, or if the issue clearly does not fit into 'garbage', 'drainage', 'potholes', or 'streetlights', then categorize it as 'other'. Do not try to force a fit into an incorrect category.
+
+Output the selected category in the specified JSON format.
+`,
 });
 
 const categorizeIssueFlow = ai.defineFlow(
@@ -58,10 +70,17 @@ const categorizeIssueFlow = ai.defineFlow(
     outputSchema: CategorizeIssueOutputSchema,
   },
   async (input) => {
-    const { output } = await categorizePrompt(input);
+    // Ensure imageDataUri is passed if it exists, otherwise it's undefined (which is fine for the prompt)
+    const promptInput: CategorizeIssueInput = {
+      caption: input.caption,
+      ...(input.imageDataUri && { imageDataUri: input.imageDataUri }),
+    };
+
+    const { output } = await categorizePrompt(promptInput);
+    
     if (!output || !PREDEFINED_CATEGORIES.includes(output.category)) {
       // Fallback or error handling if AI fails to categorize or returns an invalid category
-      console.warn(`AI categorization failed or returned invalid category: ${output?.category}. Defaulting to "other".`);
+      console.warn(`AI categorization failed or returned invalid category: ${output?.category}. Defaulting to "other". Input caption: "${input.caption}"`);
       return { category: 'other' };
     }
     return output;
