@@ -1,5 +1,5 @@
 import { genkit } from 'genkit';
-import { googleAI } from 'genkit/googleai'; // For Gemini models
+import { googleAI } from '@genkit-ai/googleai'; // For Gemini models
 // import { firebase } from 'genkit/firebase'; // If using Firebase integration for Genkit (e.g. for flow state)
 // import { dotprompt } from 'genkit/dotprompt'; // If using .prompt files
 
@@ -8,7 +8,7 @@ import { googleAI } from 'genkit/googleai'; // For Gemini models
 // or configure the plugin with an API key if needed.
 export const ai = genkit({
   plugins: [
-    googleAI(), // This will automatically use GOOGLE_API_KEY from the .env file
+    googleAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY }), // This will automatically use GOOGLE_API_KEY from the .env file or the provided key
     // firebase(), // Uncomment if you want to use Firebase for Genkit flows, tracing, etc.
     // dotprompt() // Uncomment if you plan to use .prompt files for prompts
   ],
@@ -18,4 +18,7 @@ export const ai = genkit({
   // traceStore: 'firebase',     // Example: use Firebase to store traces
 });
 
-console.log("Global Genkit AI instance initialized. It will use GOOGLE_API_KEY from environment if set.");
+console.log("Global Genkit AI instance initialized.");
+if (!process.env.NEXT_PUBLIC_GEMINI_API_KEY) {
+  console.warn("NEXT_PUBLIC_GEMINI_API_KEY is not set in environment variables. Genkit Google AI plugin might not work.");
+}
